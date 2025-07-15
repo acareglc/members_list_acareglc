@@ -1581,7 +1581,7 @@ def parse_and_save_order():
 
 
 
-# 변경내용 있음
+# 없긴 왜 없어
 
 
 
