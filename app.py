@@ -1581,10 +1581,10 @@ def parse_and_save_order():
 
 
 
-# 없긴 왜 없어
 
 
 
+# 있어여
 
 
 
