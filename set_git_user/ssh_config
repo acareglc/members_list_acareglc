@@ -1,0 +1,23 @@
+Host github-boraminfo
+    HostName github.com
+    User git
+    IdentityFile C:/Users/user/Desktop/ChatGPT/id_ed25519_boraminfo
+    IdentitiesOnly yes
+
+Host github-ehlhappyday
+    HostName github.com
+    User git
+    IdentityFile C:/Users/user/Desktop/ChatGPT/id_ed25519_ehlhappyday
+    IdentitiesOnly yes
+
+Host github-sohee4463
+    HostName github.com
+    User git
+    IdentityFile C:/Users/user/Desktop/ChatGPT/id_ed25519_sohee4463
+    IdentitiesOnly yes
+
+Host github-boraminfo5
+    HostName github.com
+    User git
+    IdentityFile C:/Users/user/Desktop/ChatGPT/id_ed25519_boraminfo5
+    IdentitiesOnly yes
