@@ -22,6 +22,10 @@ from flask import  Response
 
 
 
+# 적용합니다
+
+
+
 
 def some_function():
     print("작업 시작")
