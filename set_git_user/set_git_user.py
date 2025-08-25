@@ -6,8 +6,8 @@ def select_user():
     print("\n==============================")
     print("🔐 Git 사용자 계정을 선택하세요:")
     print("[1] members_list_boram")
-    print("[2] ehlhappyday")
-    print("[3] sohee4463")
+    print("[2] acareglc")
+    print("[3] iamsohappy0418")
     print("[4] memberslist")
     print("==============================")
     choice = input("번호를 입력하세요 (1~4): ").strip()
@@ -19,14 +19,14 @@ def select_user():
             "remote": "git@github-boraminfo:boraminfo/members_list_boram.git"
         },
         "2": {
-            "name": "ehlhappyday",
-            "email": "ehlhappyday@gmail.com",
-            "remote": "git@github-ehlhappyday:ehlhappyday/members_list_ehlhappyday.git"
+            "name": "acareglc",
+            "email": "acareglc@gmail.com",
+            "remote": "git@github-acareglc:acareglc/members_list_acareglc.git"
         },
         "3": {
-            "name": "sohee4463",
-            "email": "sohee4463@gmail.com",
-            "remote": "git@github-sohee4463:sohee4463/members_list_sohee4463.git"
+            "name": "iamsohappy0418",
+            "email": "iamsohappy0418@gmail.com",
+            "remote": "git@github-iamsohappy0418:iamsohappy0418/members_list_iamsohappy0418.git"
         },
         "4": {
             "name": "boraminfo",

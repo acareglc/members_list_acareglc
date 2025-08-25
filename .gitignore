@@ -4,7 +4,7 @@ __pycache__/
 # 민감 정보 제외
 *.json
 !requirements.txt
-!credentials.json
+credentials.json
 
 # service_account.json
 
@@ -16,3 +16,4 @@ path/to/broken-folder/*
 # .gitignore
 *\354*
 
+ssh_config

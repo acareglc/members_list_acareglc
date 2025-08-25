@@ -24,12 +24,6 @@ def git_pull_push():
         print("✅ 변경사항 없음. push 생략.")
         return
 
-
-    # 변경사항 출력
-    print("\n🔍 변경사항 요약 (git status):")
-    subprocess.run(["git", "status"], env=env)
-
- 
     # git add .
     subprocess.run(["git", "add", "."], env=env)
 
