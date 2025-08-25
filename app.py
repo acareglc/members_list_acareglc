@@ -1,32 +1,95 @@
+from flask import Flask, request, jsonify, Response
+import base64
+import requests
 import os
+import io
 import json
 import re
-import pandas as pd
+
+from openai import OpenAI
 import gspread
-import pytz
-import uuid
-import openai
-from flask import Flask, request, jsonify
-from google.oauth2.service_account import Credentials
-from dotenv import load_dotenv
-from gspread.utils import rowcol_to_a1
-from datetime import datetime
-from collections import Counter
 from oauth2client.service_account import ServiceAccountCredentials
 
-import requests
+from datetime import datetime, timedelta, timezone
+
+import pandas as pd
+import pytz
+import uuid
+from gspread.utils import rowcol_to_a1
+from collections import Counter
+
 import time
-
-from flask import  Response
-
-
-
-
-# 적용합니다
-# 작용
-###
+from PIL import Image
+import mimetypes
+import traceback
+from urllib.parse import urljoin
 
 
+# ✅ 환경 변수 로드
+if os.getenv("RENDER") is None:  # 로컬에서 실행 중일 때만
+    from dotenv import load_dotenv
+    dotenv_path = os.path.abspath('.env')
+    if not os.path.exists(dotenv_path):
+        raise FileNotFoundError(f".env 파일이 존재하지 않습니다: {dotenv_path}")
+    load_dotenv(dotenv_path)
+
+# 환경변수에서 불러오기
+prompt_id = os.getenv("PROMPT_ID")
+prompt_version = os.getenv("PROMPT_VERSION")
+
+# ✅ OpenAI 클라이언트 초기화
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+GOOGLE_SHEET_TITLE = os.getenv("GOOGLE_SHEET_TITLE")
+
+# OpenAI API 설정
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_URL = os.getenv("OPENAI_API_URL")
+
+# ✅ memberslist API 엔드포인트
+MEMBERSLIST_API_URL = os.getenv("MEMBERSLIST_API_URL")
+
+
+# ✅ Google Sheets 클라이언트 생성 함수
+def get_gspread_client():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")  # Render에서 환경변수로 넣은 값
+    if creds_json:  # Render 환경
+        creds_dict = json.loads(creds_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    else:  # 로컬 개발용 (credentials.json 파일 사용)
+        creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+        creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+
+    return gspread.authorize(creds)
+
+
+# ✅ 시트 연결
+client = get_gspread_client()
+sheet = client.open(GOOGLE_SHEET_TITLE)
+print(f"시트 '{GOOGLE_SHEET_TITLE}'에 연결되었습니다.")
+
+# ✅ 필수 환경 변수 확인
+if not GOOGLE_SHEET_TITLE:
+    raise EnvironmentError("환경변수 GOOGLE_SHEET_TITLE이 설정되지 않았습니다.")
+
+
+# ✅ 날짜 처리
+def process_order_date(text):
+    if not text:
+        return datetime.now().strftime("%Y-%m-%d")
+    return text.strip()
+
+# ✅ 한국 시간
+def now_kst():
+    return datetime.now(pytz.timezone("Asia/Seoul"))
+
+# ✅ Flask 초기화
+app = Flask(__name__)
+
+
+def get_worksheet(sheet_name):
+    return client.open(GOOGLE_SHEET_TITLE).worksheet(sheet_name)
 
 
 def some_function():
@@ -35,38 +98,13 @@ def some_function():
     print("작업 완료")
 
 
-
-# ✅ 환경 변수 로드
-
-
-if os.getenv("RENDER") is None:  # 로컬에서 실행 중일 때만
-    from dotenv import load_dotenv
-    dotenv_path = os.path.abspath('.env')
-    if not os.path.exists(dotenv_path):
-        raise FileNotFoundError(f".env 파일이 존재하지 않습니다: {dotenv_path}")
-    load_dotenv(dotenv_path)
-
-# 공통 처리
-GOOGLE_SHEET_KEY = os.getenv("GOOGLE_SHEET_KEY")
-GOOGLE_SHEET_TITLE = os.getenv("GOOGLE_SHEET_TITLE")  # ✅ 시트명 불러오기
-
-# 한국 시간 가져오는 함수
-def now_kst():
-    return datetime.now(pytz.timezone("Asia/Seoul"))
-
-
-
 # ✅ 확인용 출력 (선택)
 print("✅ GOOGLE_SHEET_TITLE:", os.getenv("GOOGLE_SHEET_TITLE"))
 print("✅ GOOGLE_SHEET_KEY 존재 여부:", "Yes" if os.getenv("GOOGLE_SHEET_KEY") else "No")
 
 
-app = Flask(__name__)
 
-if not os.getenv("GOOGLE_SHEET_KEY"):
-    raise EnvironmentError("환경변수 GOOGLE_SHEET_KEY가 설정되지 않았습니다.")
-if not os.getenv("GOOGLE_SHEET_TITLE"):  # ✅ 시트 이름도 환경변수에서 불러옴
-    raise EnvironmentError("환경변수 GOOGLE_SHEET_TITLE이 설정되지 않았습니다.")
+
 
 
 # 자연어 명령 키워드 매핑
@@ -97,7 +135,7 @@ def parse_request(text):
         result["회원명"] = name_match.group(1)
 
     # 전체 필드
-    필드패턴 = r"(회원명|휴대폰번호|회원번호|비밀번호|가입일자|생년월일|통신사|친밀도|근무처|계보도|소개한분|주소|메모|코드|카드사|카드주인|카드번호|유효기간|비번|카드생년월일|분류|회원단계|연령/성별|직업|가족관계|니즈|애용제품|콘텐츠|습관챌린지|비즈니스시스템|GLC프로젝트|리더님)"
+    필드패턴 = r"(회원명|휴대폰번호|회원번호|특수번호|가입일자|생년월일|통신사|친밀도|근무처|계보도|소개한분|주소|메모|코드|카드사|카드주인|카드번호|유효기간|비번|카드생년월일|분류|회원단계|연령/성별|직업|가족관계|니즈|애용제품|콘텐츠|습관챌린지|비즈니스시스템|GLC프로젝트|리더님)"
     수정_패턴 = re.findall(rf"{필드패턴}\s*(?:은|는|을|를)?\s*([\w가-힣\d\-\.:/@]+)", text)
 
     for 필드, 값 in 수정_패턴:
@@ -141,10 +179,10 @@ def get_counseling_sheet():
     return get_worksheet("상담일지")
 
 def get_mymemo_sheet():
-    return get_worksheet("개인메모")
+    return get_worksheet("개인일지")
 
 def get_search_memo_by_tags_sheet():
-    return get_worksheet("개인메모")
+    return get_worksheet("개인밀지")
 
 def get_dailyrecord_sheet():
     return get_worksheet("활동일지")
@@ -159,30 +197,6 @@ def get_backup_sheet():
     return get_worksheet("백업")
 
 
-# ✅ 환경 변수 로드 및 GPT API 키 설정
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# ✅ Google Sheets 인증
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
-
-
-
-
-
-
-
-
-
-# ✅ Google Sheets 연동 함수
-def get_worksheet(sheet_name):
-    try:
-        sheet = client.open(GOOGLE_SHEET_TITLE)
-        return sheet.worksheet(sheet_name)
-    except Exception as e:
-        print(f"[시트 접근 오류] {e}")
-        return None
 
 
 
@@ -197,7 +211,7 @@ field_map = {
     "이름": "회원명",
     "생일": "생년월일",
     "생년월일": "생년월일",
-    "비밀번호": "비밀번호",
+    "특수번호": "특수번호",
     "직업": "근무처",
     "직장": "근무처",
     # 필요한 항목 계속 추가 가능
@@ -211,6 +225,11 @@ def save_member(name):
 
 def update_member_fields(name, fields):
     print(f"[✏️] '{name}' 필드 업데이트: {fields}")
+
+
+
+
+
 
 
 
