@@ -25,6 +25,15 @@ import traceback
 from urllib.parse import urljoin
 
 
+
+client = gspread.authorize(creds)
+
+print("내 서비스 계정이 접근 가능한 스프레드시트 목록:")
+for s in client.openall():
+    print("-", s.title)
+
+
+
 # ✅ 환경 변수 로드
 if os.getenv("RENDER") is None:  # 로컬에서 실행 중일 때만
     from dotenv import load_dotenv
