@@ -25,15 +25,6 @@ import traceback
 from urllib.parse import urljoin
 
 
-
-client = gspread.authorize(creds)
-
-print("내 서비스 계정이 접근 가능한 스프레드시트 목록:")
-for s in client.openall():
-    print("-", s.title)
-
-
-
 # ✅ 환경 변수 로드
 if os.getenv("RENDER") is None:  # 로컬에서 실행 중일 때만
     from dotenv import load_dotenv
@@ -97,9 +88,14 @@ def now_kst():
 app = Flask(__name__)
 
 
-def get_worksheet(sheet_name):
-    return client.open(GOOGLE_SHEET_TITLE).worksheet(sheet_name)
+# 전역에서 한 번만 open
+spreadsheet = client.open(GOOGLE_SHEET_TITLE)
 
+def get_worksheet(sheet_name):
+    try:
+        return spreadsheet.worksheet(sheet_name)
+    except Exception as e:
+        raise RuntimeError(f"시트 '{sheet_name}'을 열 수 없습니다: {e}")
 
 def some_function():
     print("작업 시작")
@@ -359,19 +355,52 @@ def update_member():
         if not 요청문:
             return jsonify({"error": "요청문이 비어 있습니다."}), 400
 
+        # ✅ 회원 전체 삭제 감지
+        if "삭제" in 요청문:
+            sheet = get_member_sheet()
+            db = sheet.get_all_records()
+            member_names = [str(row.get("회원명", "")).strip() for row in db if row.get("회원명")]
+
+            name = None
+            for candidate in sorted(member_names, key=lambda x: -len(x)):
+                if candidate in 요청문:
+                    name = candidate
+                    break
+
+            if not name:
+                return jsonify({"error": "삭제할 회원명을 찾을 수 없습니다."}), 400
+
+            # 👉 요청문에 필드명이 같이 들어 있으면 전체삭제가 아님
+            field_keywords = {
+                "주소", "휴대폰번호", "회원번호", "특수번호", "가입일자", "생년월일",
+                "통신사", "친밀도", "근무처", "계보도", "소개한분", "메모", "코드"
+            }
+
+            if any(field in 요청문 for field in field_keywords):
+                # 🔥 기존: 에러 반환 → 변경: updateMember 실행
+              
+                요청문 = re.sub(r"삭제$", "비움", 요청문.strip())  # 끝에 오는 '삭제'만 안전하게 치환
+                return updateMember({"요청문": 요청문})
+
+            # 👉 전체삭제는 '회원명 + 삭제' 두 단어일 때만 진행
+            tokens = 요청문.replace(",", " ").split()
+            if len(tokens) == 2 and tokens[0] == name and tokens[1] == "삭제":
+                return delete_member_direct(name)
+
+            return jsonify({
+                "message": "회원 전체 삭제는 '회원명 삭제' 형식으로만 가능합니다."
+            }), 400
+
+        # ✅ 여기서부터 일반 updateMember 로직
         sheet = get_member_sheet()
         db = sheet.get_all_records()
         headers = [h.strip() for h in sheet.row_values(1)]
 
-
-
-     
         member_names = [str(row.get("회원명", "")).strip() for row in db if row.get("회원명")]
+
         # ✅ 계보도 대상자 추출
         lineage_match = re.search(r"계보도[를은는]?\s*([가-힣]{2,})\s*(좌측|우측|라인|왼쪽|오른쪽)", 요청문)
         계보도_대상 = lineage_match.group(1) if lineage_match else None
-
-
 
         # 회원명 찾기
         name = None
@@ -391,31 +420,18 @@ def update_member():
         row_index = matching_rows[0] + 2
         member = db[matching_rows[0]]
 
-
-        
         # ✅ 계보도 등 모든 필드는 parse_request_and_update 에서만 처리
         수정된필드 = {}
-        # 수정
         updated_member, 수정된필드 = parse_request_and_update(요청문, member)
         print("[🧪 디버그] 수정된 필드:", 수정된필드)
-
-
-
-
-
-
-
 
         수정결과 = []
         # 수정된 필드만 순회
         for key, value in 수정된필드.items():
             if key.strip().lower() in headers:
                 col = headers.index(key.strip().lower()) + 1
-
                 print(f"[⬆️ 저장 시도] row={row_index}, col={col}, value={value}")
-
                 success = safe_update_cell(sheet, row_index, col, value, clear_first=True)
-
                 if success:
                     수정결과.append({"필드": key, "값": value})
 
@@ -425,6 +441,7 @@ def update_member():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
 
 
 
@@ -560,7 +577,7 @@ def parse_request_and_update_multi(data: str, member: dict) -> dict:
 
 
 
-import re
+
 
 # ✅ 꼬리 명령어 정제 함수 추가
 def clean_tail_command(text):
@@ -774,8 +791,19 @@ def parse_request_and_update(data: str, member: dict) -> tuple:
         for i in range(len(tokens) - 1):
             키워드 = tokens[i]
             값 = tokens[i + 1]
+
+
+
             if 키워드 in 필드맵:
+
+
+                # ✅ 공백/삭제 키워드 처리
+                if 값 in {"삭제", "지움", "비움", "공백", "없음", "없애기", "비워"}:
+                    값 = ""
+
                 필드 = 필드맵[키워드]
+
+       
                 member[필드] = 값
                 member[f"{필드}_기록"] = f"(기록됨: {값})"
                 수정된필드[필드] = 값
@@ -798,6 +826,19 @@ def parse_request_and_update(data: str, member: dict) -> tuple:
         if match:
 
             값 = match.group(1).strip()
+
+
+            # ✅ 필드 삭제 키워드 즉시 처리
+            field_delete_keywords = {"지움", "비움", "지우기", "없음", "없애기", "비워", "공백", "삭제"}
+            if 값 in field_delete_keywords:
+                필드 = 필드맵[키]
+                수정된필드[필드] = ""
+                member[필드] = ""
+                member.pop(f"{필드}_기록", None)
+                continue
+
+
+
 
 
 
@@ -1005,6 +1046,22 @@ def parse_request_and_update(data: str, member: dict) -> tuple:
                 member["회원번호"] = member_no
                 member["회원번호_기록"] = f"(기록됨: {member_no})"
                 수정된필드["회원번호"] = member_no
+
+
+
+
+            # ✅ "삭제", "지움", "비움" 등은 모두 공란("")으로 변환
+            delete_keywords = {"삭제", "지움", "비움", "지우기", "없음", "없애기", "비워"}
+            for k, v in list(수정된필드.items()):
+                if str(v).strip() in delete_keywords:
+                    수정된필드[k] = ""
+                    member[k] = ""
+                    # ✅ 기록 자체도 아예 삭제
+                    if f"{k}_기록" in member:
+                        del member[f"{k}_기록"]
+
+
+
 
     return member, 수정된필드
 
@@ -1240,23 +1297,16 @@ def save_memo():
 
 
 
-
-
-
-
-
+# ✅ 회원 삭제 공통 로직 (update_member에서도 호출 가능)
 # ==========================================================================
 # ✅ 회원 삭제 API (안전 확인 포함)
 # ==========================================================================
 # ✅ 회원 삭제 API
-@app.route('/delete_member', methods=['POST'])
-def delete_member():
+def delete_member_direct(name: str):
     try:
-        name = request.get_json().get("회원명")
         if not name:
             return jsonify({"error": "회원명을 입력해야 합니다."}), 400
 
-        # DB 시트
         sheet = get_member_sheet()
         data = sheet.get_all_records()
 
@@ -1275,8 +1325,16 @@ def delete_member():
         return jsonify({"error": f"'{name}' 회원을 찾을 수 없습니다."}), 404
 
     except Exception as e:
+        import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/delete_member', methods=['POST'])
+def delete_member():
+    name = request.get_json().get("회원명")
+    return delete_member_direct(name)
+
 
 
 
@@ -1507,7 +1565,7 @@ except NameError:
 SHEET_KEYWORDS = {"상담일지", "개인일지", "활동일지", "회원메모", "회원주소"}
 ACTION_KEYWORDS = {"저장", "기록", "입력"}
 
-_SHEET_PAT = r"(?:상담\s*일지|개인\s*메모|활동\s*일지|회원\s*메모|회원\s*주소|상담일지|개인일지|활동일지|회원메모|회원주소)"
+_SHEET_PAT = r"(?:상담\s*일지|개인\s*일지|활동\s*일지|회원\s*메모|회원\s*주소|상담일지|개인일지|활동일지|회원메모|회원주소)"
 _ACTION_PAT = r"(?:저장|기록|입력)"
 
 def quote_safe(text: str) -> str:
@@ -1554,13 +1612,32 @@ def update_member_field_strict(member_name: str, field_name: str, value: str) ->
         return False
     return bool(safe_update_cell(sheet, target_row, field_col, value, clear_first=True))
 
+
+
+
+
+
 def save_to_sheet(sheet_name: str, member_name: str, content: str) -> bool:
     sheet = get_worksheet(sheet_name)
     if sheet is None:
         raise RuntimeError(f"'{sheet_name}' 시트를 찾을 수 없습니다.")
+
     ts = now_str_kr()
-    sheet.insert_row([ts, (member_name or "").strip(), (content or "").strip()], index=2)
+
+    # ✅ 저장 전에 내용 앞부분에서 회원명이 중복되면 제거
+    clean_content = (content or "").strip()
+    if member_name and clean_content.startswith(member_name):
+        clean_content = clean_content[len(member_name):].strip()
+
+    sheet.insert_row([ts, (member_name or "").strip(), clean_content], index=2)
     return True
+
+
+
+
+
+
+
 
 def parse_request_line(text: str):
     if not text or not text.strip():
@@ -1583,114 +1660,61 @@ def parse_request_line(text: str):
         return member_name, sheet_keyword, None, content
     return member_name, sheet_keyword, action_keyword, content
 
-@app.route("/save_note_unified", methods=["POST"])
-def save_note_unified():
-    try:
-        data = request.get_json(force=True)
-        raw = data.get("요청문", "")
-        member_name, sheet_keyword, action_keyword, content = parse_request_line(raw)
-        if not member_name:
-            return jsonify({"ok": False, "message": "형식 오류: 첫 단어에 회원명을 입력하세요."}), 400
-        if not sheet_keyword:
-            return jsonify({"ok": False, "message": "형식 오류: 두 번째 단어가 유효한 시트키워드가 아닙니다.", "허용": sorted(SHEET_KEYWORDS)}), 400
-        if not action_keyword:
-            return jsonify({"ok": False, "message": "형식 오류: 세 번째 단어에 '저장/기록/입력' 중 하나를 입력하세요.", "허용": sorted(ACTION_KEYWORDS)}), 400
-        if sheet_keyword in {"상담일지", "개인일지", "활동일지"}:
-            ok = save_to_sheet(sheet_keyword, member_name, content)
-            if ok:
-                return jsonify({"ok": True, "message": f"{member_name}님의 {sheet_keyword} 저장 완료."}), 200
-            else:
-                return jsonify({"ok": False, "message": f"{sheet_keyword}에 동일 내용이 이미 존재합니다."}), 409
-        elif sheet_keyword == "회원메모":
-            ok = update_member_field_strict(member_name, "메모", content)
-            if not ok:
-                return jsonify({"ok": False, "message": f"'{member_name}' 회원을 찾을 수 없습니다."}), 404
-            return jsonify({"ok": True, "message": f"{member_name}님의 메모가 DB에 저장되었습니다."}), 200
-        elif sheet_keyword == "회원주소":
-            ok = update_member_field_strict(member_name, "주소", content)
-            if not ok:
-                return jsonify({"ok": False, "message": f"'{member_name}' 회원을 찾을 수 없습니다."}), 404
-            return jsonify({"ok": True, "message": f"{member_name}님의 주소가 DB에 저장되었습니다."}), 200
-        else:
-            return jsonify({"ok": False, "message": f"처리할 수 없는 시트키워드: {sheet_keyword}"}), 400
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-
-    
 
 
 
 
 
 
-
-
-
-
-    
-# ===========================================================================
-# 개인 메모 시트에서 단어 기반으로 유사한 메모를 검색하는 기능을 수행합니다.
-@app.route("/search_memo_by_text", methods=["POST"])
-def search_memo_by_text():
+@app.route('/add_counseling', methods=['POST'])
+def add_counseling():
     try:
         data = request.get_json()
+        text = data.get("요청문", "").replace(".", "").strip()
 
-        all_keywords = data.get("keywords", [])
-        limit = int(data.get("limit", 20))
-        sort_order = data.get("sort", "desc")
-        match_mode = data.get("match_mode", "any")
-
-        # 🔹 검색 조건 로깅
-        print("===== 📌 검색 조건 =====")
-        print(f"검색 키워드: {all_keywords if all_keywords else '없음'}")
-        print(f"매칭 방식: {match_mode}")
-        print("========================")
-
-        sheet = get_mymemo_sheet()
-        values = sheet.get_all_values()[1:]
-        results = []
-
-        for row in values:
-            if len(row) < 3:
-                continue
-
-            date_str, member, content = row[0], row[1], row[2]
-            combined_text = f"{member} {content}"
-
-            if not match_condition(combined_text, all_keywords, match_mode):
-                continue
-
-            try:
-                parsed_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-            except ValueError:
-                continue
-
-            results.append({
-                "날짜": date_str,
-                "회원명": member,
-                "내용": content,
-                "날짜_obj": parsed_date
-            })
-
-        results.sort(key=lambda x: x["날짜_obj"], reverse=(sort_order == "desc"))
-        for r in results:
-            del r["날짜_obj"]
-
-        response = {
-            "검색조건": {
-                "검색어": all_keywords,
-                "매칭방식": match_mode,
-                "정렬": sort_order,
-                "결과_최대개수": limit
-            },
-            "검색결과": results[:limit]
+        # ✅ 키워드 정규화
+        replacements = {
+            "개인 메모": "개인일지", "상담 일지": "상담일지",
+            "활동 일지": "활동일지", "회원 메모": "회원메모",
+            "제품 주문": "제품주문", "회원 주소": "회원주소"
         }
+        for k, v in replacements.items():
+            text = text.replace(k, v)
 
-        return jsonify(response), 200
+        # ✅ sheet 키워드 (띄어쓰기 허용 버전 포함)
+        sheet_keywords = [
+            "상담일지", "개인일지", "활동일지", "회원메모", "제품주문", "회원주소",
+            "상담 일지", "개인 일지", "활동 일지", "회원 메모", "제품 주문", "회원 주소"
+        ]
+        action_keywords = ["저장", "기록", "입력"]
+
+        # ✅ 회원명 추출 (띄어쓰기 버전 포함)
+        match = re.search(r"([가-힣]{2,10})\s*(상담\s*일지|개인\s*일지|활동\s*일지|회원\s*메모|회원\s*주소|제품\s*주문)", text)
+        if not match:
+            return jsonify({"message": "회원명을 인식할 수 없습니다."})
+        member_name = match.group(1)
+
+        # ✅ 시트 키워드 추출 후 정규화 (공백 제거)
+        matched_sheet = next((kw for kw in sheet_keywords if kw in text), None)
+        if not matched_sheet:
+            return jsonify({"message": "저장할 시트를 인식할 수 없습니다."})
+        matched_sheet = matched_sheet.replace(" ", "")  # "개인 일지" → "개인일지"
+
+        # ✅ 불필요한 키워드 제거 (회원명은 보존)
+        for kw in sheet_keywords + action_keywords:
+            text = text.replace(kw, "")
+        text = text.strip()
+        text = re.sub(r'^[:：]\s*', '', text)
+
+        # ✅ 상담일지, 개인일지, 활동일지 저장
+        if matched_sheet in ["상담일지", "개인일지", "활동일지"]:
+            content = text.strip()
+            if not content:
+                return jsonify({"message": "저장할 내용이 비어 있습니다."}), 400
+            if save_to_sheet(matched_sheet, member_name, content):
+                return jsonify({"message": f"{member_name}님의 {matched_sheet} 저장이 완료되었습니다."})
+
+        return jsonify({"message": "처리할 수 없는 시트입니다."})
 
     except Exception as e:
         import traceback
@@ -1698,319 +1722,255 @@ def search_memo_by_text():
         return jsonify({"error": str(e)}), 500
 
 
-# ✅ 자연어 텍스트에서 키워드 추출 및 매칭 방식 자동 판단
-def run_memo_search_from_natural_text(text):
-    ignore_words = ["개인일지", "검색", "에서", "해줘", "해", "줘"]
-    words = [kw for kw in text.split() if kw not in ignore_words]
-
-    if not words:
-        return jsonify({"error": "검색어가 없습니다."}), 400
-
-    match_mode = "all" if "동시" in words else "any"
-    keywords = [kw for kw in words if kw != "동시"]
-
-    with app.test_request_context(json={
-        "keywords": keywords,
-        "limit": 20,
-        "sort": "desc",
-        "match_mode": match_mode
-    }):
-        return search_memo_by_text()
 
 
-# ✅ 키워드 포함 여부 판별 함수
-def match_condition(text, keywords, mode):
+    
+
+
+
+
+
+
+
+
+
+
+
+# ======================================================================
+# 메모 검색 (개인/상담/활동/전체)
+# ======================================================================
+# ======================================================================
+# 메모 검색 (개인/상담/활동/전체)
+# ======================================================================
+SHEET_MAP = {
+    "개인": "개인일지",
+    "상담": "상담일지",
+    "활동": "활동일지",
+}
+
+DT_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]
+
+
+# ---------- Utils ----------
+def parse_dt(dt_str: str):
+    for fmt in DT_FORMATS:
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def parse_date_yyyymmdd(date_str: str):
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def match_condition(text: str, keywords, mode: str):
     if not keywords:
         return True
-    text = text.lower()
-    keywords = [kw.lower() for kw in keywords]
-    if mode == "all":
-        return all(kw in text for kw in keywords)
-    return any(kw in text for kw in keywords)
+    text_l = text.lower()
+    kws = [kw.lower() for kw in keywords]
+    if mode == "동시검색":
+        return all(kw in text_l for kw in kws)
+    return any(kw in text_l for kw in kws)
 
 
+def search_in_sheet(sheet_name, keywords, search_mode="any",
+                    start_date=None, end_date=None, limit=20):
+    sheet = get_worksheet(sheet_name)   # ✅ 전역 spreadsheet 재사용
+    rows = sheet.get_all_values()
+    if not rows or len(rows[0]) < 3:
+        return [], False
 
+    records = rows[1:]  # 헤더 제외
+    results = []
 
-            
-    
+    for row in records:
+        if len(row) < 3:
+            continue
 
+        작성일자, 회원명, 내용 = (row[0] or "").strip(), (row[1] or "").strip(), (row[2] or "").strip()
+        작성일_dt = parse_dt(작성일자)
+        if 작성일_dt is None:
+            continue
 
+        # 날짜 범위 필터
+        if start_date and 작성일_dt < start_date:
+            continue
+        if end_date and 작성일_dt > (end_date + timedelta(days=1) - timedelta(seconds=1)):
+            continue
 
-    
-    
-
-
-
-
-
-
-# ===========================================================================
-# 상담일지 시트에서 단어 기반으로 유사한 메모를 검색하는 기능을 수행합니다.
-@app.route("/search_counseling_by_text_from_natural", methods=["POST"])
-def search_counseling_by_text_from_natural():
-    try:
-        data = request.get_json()
-        keywords = data.get("keywords", [])
-        limit = int(data.get("limit", 20))
-        sort_order = data.get("sort", "desc")
-        match_mode = data.get("match_mode", "any")
-
-        print("▶ 상담일지 검색 조건:", keywords, match_mode)
-
-        if not keywords or not isinstance(keywords, list):
-            return jsonify({"error": "keywords는 비어 있지 않은 리스트여야 합니다."}), 400
-
-        sheet = get_counseling_sheet()
-        values = sheet.get_all_values()[1:]
-        results = []
-
-        for row in values:
-            if len(row) < 3:
-                continue
-            date_str, member, content = row[0], row[1], row[2]
-
-            combined_text = f"{member} {content}"
-            if match_mode == "all" and not all(kw.lower() in combined_text.lower() for kw in keywords):
-                continue
-            if match_mode == "any" and not any(kw.lower() in combined_text.lower() for kw in keywords):
-                continue
-
-            try:
-                parsed_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-            except ValueError:
-                continue
-
+        combined_text = f"{회원명} {내용}"
+        if match_condition(combined_text, keywords, search_mode):
             results.append({
-                "날짜": date_str,
-                "회원명": member,
-                "내용": content,
-                "날짜_obj": parsed_date
+                "작성일자": 작성일자,
+                "회원명": 회원명,
+                "내용": 내용,
+                "_작성일_dt": 작성일_dt
             })
 
-        results.sort(key=lambda x: x["날짜_obj"], reverse=(sort_order == "desc"))
+    results.sort(key=lambda x: x["_작성일_dt"], reverse=True)
+    for r in results:
+        r.pop("_작성일_dt", None)
 
-        for r in results:
-            del r["날짜_obj"]
+    has_more = len(results) > limit
+    return results[:limit], has_more
 
-        return jsonify({
-            "검색조건": {
-                "키워드": keywords,
-                "매칭방식": match_mode,
-                "정렬": sort_order
+
+# ---------- Routes ----------
+@app.route("/search_memo", methods=["POST"])
+def search_memo():
+    """
+    {
+      "keywords": ["세금", "부가세"],
+      "mode": "개인",             # 개인 / 상담 / 활동 / 전체
+      "search_mode": "동시검색",  # any(기본) / 동시검색
+      "start_date": "2025-01-01",
+      "end_date": "2025-12-31",
+      "limit": 20
+    }
+    """
+    data = request.get_json(silent=True) or {}
+
+    keywords = data.get("keywords", [])
+    mode = data.get("mode", "전체")
+    search_mode = data.get("search_mode", "any")
+    limit = int(data.get("limit", 20))
+
+    start_dt = parse_date_yyyymmdd(data.get("start_date")) if data.get("start_date") else None
+    end_dt = parse_date_yyyymmdd(data.get("end_date")) if data.get("end_date") else None
+
+    if not isinstance(keywords, list) or not keywords:
+        return jsonify({"error": "keywords는 비어있지 않은 리스트여야 합니다."}), 400
+
+    results, more_map = {}, {}
+
+    try:
+        if mode == "전체":
+            for m, sheet_name in SHEET_MAP.items():
+                r, more = search_in_sheet(sheet_name, keywords, search_mode, start_dt, end_dt, limit)
+                results[m] = r
+                if more: more_map[m] = True
+        else:
+            sheet_name = SHEET_MAP.get(mode)
+            if not sheet_name:
+                return jsonify({"error": f"잘못된 mode 값입니다: {mode}"}), 400
+            r, more = search_in_sheet(sheet_name, keywords, search_mode, start_dt, end_dt, limit)
+            results[mode] = r
+            if more: more_map[mode] = True
+
+        resp = {
+            "status": "success",
+            "search_params": {
+                "keywords": keywords,
+                "mode": mode,
+                "search_mode": search_mode,
+                "start_date": data.get("start_date"),
+                "end_date": data.get("end_date"),
+                "limit": limit
             },
-            "검색결과": results[:limit]
-        }), 200
-
+            "results": results
+        }
+        if more_map:
+            resp["more_results"] = {k: "더 많은 결과가 있습니다." for k in more_map}
+        return jsonify(resp), 200
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
-# ✅ 자연어 텍스트에서 키워드 추출 및 매칭 방식 자동 판단
-def run_counseling_search_from_natural_text(text):
-    ignore_words = ["상담일지", "검색", "에서", "해줘", "해", "줘"]
-    words = [kw for kw in text.split() if kw not in ignore_words]
+@app.route("/search_memo_from_text", methods=["POST"])
+def search_memo_from_text():
+    """
+    {
+      "text": "전체메모 검색 포항 동시",
+      "limit": 20
+    }
+    """
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    limit = int(data.get("limit", 20))
 
-    if not words:
-        return jsonify({"error": "검색어가 없습니다."}), 400
+    if not text:
+        return jsonify({"error": "text가 비어 있습니다."}), 400
 
-    match_mode = "all" if "동시" in words else "any"
-    keywords = [kw for kw in words if kw != "동시"]
+    tokens = text.split()
+    mode = "전체"
+    if "개인" in tokens: mode = "개인"
+    elif "상담" in tokens: mode = "상담"
+    elif "활동" in tokens: mode = "활동"
+    elif "전체" in tokens or "전체메모" in tokens: mode = "전체"
+
+    search_mode = "동시검색" if ("동시" in tokens or "동시검색" in tokens) else "any"
+
+    ignore = {"검색","에서","해줘","해","줘","동시","동시검색","개인","상담","활동","전체","전체메모"}
+    keywords = [t for t in tokens if t not in ignore]
 
     with app.test_request_context(json={
         "keywords": keywords,
-        "limit": 20,
-        "sort": "desc",
-        "match_mode": match_mode
+        "mode": mode,
+        "search_mode": search_mode,
+        "limit": limit
     }):
-        return search_counseling_by_text_from_natural()
+        return search_memo()
 
 
+# ---------- 내부 호출용 ----------
+def run_all_memo_search_from_natural_text(text: str):
+    """
+    자연어 문장에서 keywords, search_mode를 추출해
+    /search_memo API를 내부 호출합니다. (mode=전체 고정)
+    """
+    ignore_words = {"전체메모", "검색", "에서", "해줘", "해", "줘"}
+    tokens = text.split()
 
+    has_dongsi = "동시" in tokens or "동시검색" in tokens
+    search_mode = "동시검색" if has_dongsi else "any"
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ===========================================================================
-# 활동일지 시트에서 단어 기반으로 유사한 메모를 검색하는 기능을 수행합니다.
-@app.route("/search_activity_by_text_from_natural", methods=["POST"])
-def search_activity_by_text_from_natural():
-    try:
-        data = request.get_json()
-        keywords = data.get("keywords", [])
-        limit = int(data.get("limit", 20))
-        sort_order = data.get("sort", "desc")
-        match_mode = data.get("match_mode", "any")
-
-        print("▶ 활동일지 검색 조건:", keywords, match_mode)
-
-        if not keywords or not isinstance(keywords, list):
-            return jsonify({"error": "keywords는 비어 있지 않은 리스트여야 합니다."}), 400
-
-        sheet = get_dailyrecord_sheet()
-        values = sheet.get_all_values()[1:]
-        results = []
-
-        for row in values:
-            if len(row) < 3:
-                continue
-            date_str, member, content = row[0], row[1], row[2]
-
-            combined_text = f"{member} {content}"
-            if match_mode == "all" and not all(kw.lower() in combined_text.lower() for kw in keywords):
-                continue
-            if match_mode == "any" and not any(kw.lower() in combined_text.lower() for kw in keywords):
-                continue
-
-            try:
-                parsed_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-            except ValueError:
-                continue
-
-            results.append({
-                "날짜": date_str,
-                "회원명": member,
-                "내용": content,
-                "날짜_obj": parsed_date
-            })
-
-        results.sort(key=lambda x: x["날짜_obj"], reverse=(sort_order == "desc"))
-
-        for r in results:
-            del r["날짜_obj"]
-
-        return jsonify({
-            "검색조건": {
-                "키워드": keywords,
-                "매칭방식": match_mode,
-                "정렬": sort_order
-            },
-            "검색결과": results[:limit]
-        }), 200
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
-
-# ✅ 자연어 텍스트에서 키워드 추출 및 매칭 방식 자동 판단
-def run_activity_search_from_natural_text(text):
-    ignore_words = ["활동일지", "검색", "에서", "해줘", "해", "줘"]
-    words = [kw for kw in text.split() if kw not in ignore_words]
-
-    if not words:
-        return jsonify({"error": "검색어가 없습니다."}), 400
-
-    match_mode = "all" if "동시" in words else "any"
-    keywords = [kw for kw in words if kw != "동시"]
-
-    with app.test_request_context(json={
-        "keywords": keywords,
-        "limit": 20,
-        "sort": "desc",
-        "match_mode": match_mode
-    }):
-        return search_activity_by_text_from_natural()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ===========================================================================
-# 전체메모 에서 단어 기반으로 유사한 메모를 검색하는 기능을 수행합니다.
-@app.route("/search_all_memo_by_text_from_natural", methods=["POST"])
-def search_all_memo_by_text_from_natural():
-    try:
-        data = request.get_json(silent=True)
-        if data is None:
-            return jsonify({"error": "JSON 데이터가 유효하지 않거나 없습니다."}), 400
-
-        raw_text = data.get("text", "")
-        if not raw_text.strip() and "keywords" in data:
-            raw_text = " ".join(data["keywords"])
-
-        if not raw_text.strip():
-            return jsonify({"error": "검색어가 없습니다."}), 400
-
-        return run_all_memo_search_from_natural_text(raw_text)
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
-
-# ✅ 자연어 기반 전체메모 검색 함수 (분리된 내부 처리용)
-def run_all_memo_search_from_natural_text(text):
-    ignore_words = ["전체메모", "검색", "에서", "해줘", "해", "줘", "동시"]
-    words = [kw for kw in text.split() if kw not in ignore_words]
-    has_dongsi = "동시" in text.split()
-    match_mode = "all" if has_dongsi else "any"
-    keywords = words
+    keywords = [kw for kw in tokens if kw not in ignore_words and kw not in {"동시", "동시검색"}]
 
     if not keywords:
         return jsonify({"error": "검색어가 없습니다."}), 400
 
     payload = {
         "keywords": keywords,
-        "limit": 20,
-        "sort": "desc",
-        "match_mode": match_mode
+        "mode": "전체",
+        "search_mode": search_mode,
+        "limit": 20
     }
 
-    with app.test_client() as client:
-        개인일지 = client.post("/search_memo_by_text", json=payload)
-        활동일지 = client.post("/search_activity_by_text_from_natural", json=payload)
-        상담일지 = client.post("/search_counseling_by_text_from_natural", json=payload)
+    with app.test_request_context(json=payload):
+        return search_memo()
 
-    def extract_results(response):
-        try:
-            json_data = response.get_json()
-            if json_data and "검색결과" in json_data:
-                return json_data["검색결과"]
-        except Exception:
-            pass
-        return []
 
-    result_lines = []
 
-    for label, res in [("개인일지", 개인일지), ("활동일지", 활동일지), ("상담일지", 상담일지)]:
-        result_lines.append(f"=== {label} ===")
-        for r in extract_results(res):
-            result_lines.append(f"{r['날짜']} {r['회원명']} {r['내용']}")
-        result_lines.append("")
 
-    response_text = "\n".join(result_lines)
-    return response_text, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     
@@ -3128,6 +3088,7 @@ def append_row_to_sheet(sheet, row):
     sheet.append_row(row, value_input_option="USER_ENTERED")
 
 @app.route('/save_order_from_json', methods=['POST'])
+
 def save_order_from_json():
     try:
         data = request.get_json()
@@ -3159,6 +3120,17 @@ def save_order_from_json():
 
 
 
+
+@app.route('/saveOrder', methods=['POST'])
+@app.route('/save_Order', methods=['POST'])
+def saveOrder():
+    try:
+        payload = request.get_json(force=True)
+        resp = requests.post(MEMBERSLIST_API_URL, json=payload)
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 
@@ -3270,7 +3242,6 @@ def parse_and_save_order():
 
 
 # 잘 작동함
-# 작동시킴
 
 
 
