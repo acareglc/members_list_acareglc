@@ -25,6 +25,12 @@ import traceback
 from urllib.parse import urljoin
 
 
+
+# 잘됨
+
+
+
+
 # ✅ 환경 변수 로드
 if os.getenv("RENDER") is None:  # 로컬에서 실행 중일 때만
     from dotenv import load_dotenv
