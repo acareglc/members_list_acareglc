@@ -27,6 +27,7 @@ from urllib.parse import urljoin
 
 
 # 잘됨
+# 동작
 
 
 
