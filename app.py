@@ -71,10 +71,15 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 
+
 # ✅ 시트 연결
 client = get_gspread_client()
-sheet = client.open(GOOGLE_SHEET_TITLE)
-print(f"시트 '{GOOGLE_SHEET_TITLE}'에 연결되었습니다.")
+SHEET_KEY = os.getenv("GOOGLE_SHEET_KEY")
+if not SHEET_KEY:
+    raise EnvironmentError("환경변수 GOOGLE_SHEET_KEY가 설정되지 않았습니다.")
+spreadsheet = client.open_by_key(SHEET_KEY)
+print(f"시트에 연결되었습니다. (ID={SHEET_KEY})")
+
 
 # ✅ 필수 환경 변수 확인
 if not GOOGLE_SHEET_TITLE:
@@ -96,7 +101,7 @@ app = Flask(__name__)
 
 
 # 전역에서 한 번만 open
-spreadsheet = client.open(GOOGLE_SHEET_TITLE)
+
 
 def get_worksheet(sheet_name):
     try:
