@@ -110,8 +110,8 @@ from service.commission_service import (
 
 
 
+# 실행이 잘됨
 
-# 잘됨
 
 
 
