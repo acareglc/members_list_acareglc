@@ -5,7 +5,7 @@ import re
 
 # 정확히 교체할 대상 (import 구문 전체 문자열 기준)
 
-OLD = r"handle_update_member()"
+OLD = r"비밀번호"
 
 
 # NEW = r"query_multi"

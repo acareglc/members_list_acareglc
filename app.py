@@ -1198,14 +1198,18 @@ def commission_route():
 
 
 
+# --------------------------------------------------
+# 📸 이미지 업로드 & 검색 라우트
+# --------------------------------------------------
+from routes.routes_image import upload_image_func, search_image_func
 
-# 잘 작동함
+@app.route("/upload_image", methods=["POST"])
+def upload_image_route():
+    return upload_image_func()
 
-
-
-
-
-
+@app.route("/search_image", methods=["GET"])
+def search_image_route():
+    return search_image_func()
 
 
 
