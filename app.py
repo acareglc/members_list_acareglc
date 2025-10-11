@@ -1197,22 +1197,33 @@ def commission_route():
 
 
 
-
 # --------------------------------------------------
 # 📸 이미지 업로드 & 검색 라우트
 # --------------------------------------------------
 from routes.routes_image import upload_image_func, search_image_func
 
+# =================================================
+# ✅ 이미지 업로드 & 검색 (OAuth + 시트 기록)
+# =================================================
 @app.route("/upload_image", methods=["POST"])
-def upload_image_route():
+def upload_image():
     return upload_image_func()
 
-@app.route("/search_image", methods=["GET"])
+
+
+
+@app.route("/search_image", methods=["GET", "POST"])
 def search_image_route():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        keyword = data.get("keyword", "").strip()
+
+        # ✅ request.args 흉내내기 (update는 반환값이 None이므로 따로 처리)
+        args_copy = request.args.copy()
+        args_copy.update({"keyword": keyword})
+        request.args = args_copy
+
     return search_image_func()
-
-
-
 
 
 
