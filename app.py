@@ -701,6 +701,40 @@ def nlu_to_pc_input(text: str) -> dict:
     if m:
         return {"intent": "search_member", "query": {"특수번호": m.group(1)}}
 
+
+
+
+
+    # -------------------------------
+    # 이미지메모 관련
+    # -------------------------------
+    # 이미지메모 저장
+    m = re.match(r'이미지메모\s*저장\s*"(.*?)"\s*"(.*?)"', text)
+    if m:
+        member_name, description = m.groups()
+        return {
+            "intent": "upload_image",
+            "query": {
+                "회원명": member_name.strip(),
+                "설명": description.strip()
+            }
+        }
+
+    # 이미지메모 검색 / 보기
+    m = re.match(r'이미지메모\s*(검색|보기)\s*(.*)', text)
+    if m:
+        keyword = m.group(2).strip()
+        return {
+            "intent": "search_image",
+            "query": {"keyword": keyword}
+        }
+
+
+
+
+
+
+
     # -------------------------------
     # 메모/일지 관련
     # -------------------------------

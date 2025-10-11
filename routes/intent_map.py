@@ -25,6 +25,7 @@ from routes.routes_commission import (
 )
 
 
+from routes.routes_image import upload_image_func, search_image_func
 
 
 # ======================================================================================
@@ -59,6 +60,16 @@ MEMO_INTENTS = {
     "memo_find_auto": memo_find_auto_func,
 }
 
+
+# 이미지메모 관련
+IMAGE_INTENTS = {
+    "upload_image": upload_image_func,
+    "search_image": search_image_func,
+}
+
+
+
+
 # 주문 관련
 ORDER_INTENTS = {
     "order_upload_pc": order_upload_pc_func,
@@ -83,6 +94,7 @@ COMMISSION_INTENTS = {
 INTENT_MAP = {
     **MEMBER_INTENTS,
     **MEMO_INTENTS,
+    **IMAGE_INTENTS,  # ✅ 추가
     **ORDER_INTENTS,
     **COMMISSION_INTENTS,
 }
