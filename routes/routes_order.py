@@ -4,7 +4,7 @@ from utils import parse_order_from_text
 from utils import extract_order_from_uploaded_image
 from utils import process_order_date
 from utils import get_worksheet
-from parser.parse import handle_product_order, save_order_to_sheet
+from parser.parse import save_order_to_sheet
 
 
 import os, re, io, json, base64, requests, traceback
@@ -216,7 +216,6 @@ def order_upload_func():
 
 
 
-from parser import handle_order_save
 
 def save_order_proxy_func():
     """
@@ -593,6 +592,146 @@ def order_upload_ipad_func():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ===============================================
+# ✅ 제품 주문 처리
+# ===============================================
+def handle_product_order(text: str, member_name: str):
+    """
+    자연어 문장을 파싱 후 제품 주문을 저장합니다.
+    """
+    try:
+        from parser import parse_order_text
+        parsed = parse_order_text(text)
+        parsed["회원명"] = member_name
+        handle_order_save(parsed)
+        return jsonify({"message": f"{member_name}님의 제품주문 저장이 완료되었습니다."})
+    except Exception as e:
+        return jsonify({"error": f"제품주문 처리 중 오류 발생: {str(e)}"}), 500
+
+
+
+
+
+
+
+def parse_and_save_order(data: dict):
+    """
+    자연어 기반 제품 주문 문장 → 필드 파싱 → 시트 저장
+    예: "이태수 제품주문 저장 애터미 징코앤낫토 2개 카드결제"
+    """
+    query = data.get("query", "").strip()
+    if not query:
+        return {"status": "error", "message": "❌ query 값이 없습니다."}
+
+    # ✅ 회원명 추출
+    member_match = re.search(r"(\S+)\s*제품주문", query)
+    member_name = member_match.group(1) if member_match else ""
+
+    # ✅ 제품명 + 수량 추출
+    product_match = re.findall(r"([가-힣A-Za-z0-9&]+)\s*(\d+)?개?", query)
+    if not product_match:
+        return {"status": "error", "message": "❌ 제품명이 인식되지 않았습니다."}
+
+    results = []
+    for prod, qty in product_match:
+        order_data = {
+            "주문일자": datetime.now().strftime("%Y-%m-%d"),
+            "회원명": member_name,
+            "회원번호": "",
+            "휴대폰번호": "",
+            "제품명": prod,
+            "제품가격": 0,
+            "PV": 0,
+            "결재방법": "카드",
+            "주문자_고객명": member_name,
+            "주문자_휴대폰번호": "",
+            "배송처": "",
+            "수령확인": "",
+        }
+
+        res = handle_order_save(order_data)
+        results.append(res.get("latest_order", order_data))
+
+    return {
+        "status": "success",
+        "message": f"✅ {len(results)}건 제품주문 저장 완료",
+        "saved_orders": results
+    }
+
+
+
+
+
+
+
+# ===============================================
+# ✅ 주문 시트 저장
+# ===============================================
+# -----------------------------
+# 주문 저장 함수
+# -----------------------------
+def handle_order_save(data: dict):
+    sheet = get_worksheet("제품주문")
+    if not sheet:
+        return {"http_status": 500, "status": "error", "message": "제품주문 시트를 찾을 수 없습니다."}
+
+    # ✅ 주문일자 변환
+    order_date = process_order_date(data.get("주문일자", ""))
+    row = [
+        order_date, data.get("회원명", ""), data.get("회원번호", ""), data.get("휴대폰번호", ""),
+        data.get("제품명", ""), float(data.get("제품가격", 0)), float(data.get("PV", 0)),
+        data.get("결재방법", ""), data.get("주문자_고객명", ""), data.get("주문자_휴대폰번호", ""),
+        data.get("배송처", ""), data.get("수령확인", "")
+    ]
+
+    values = sheet.get_all_values()
+
+    # ✅ 헤더 없으면 생성
+    if not values:
+        headers = [
+            "주문일자", "회원명", "회원번호", "휴대폰번호",
+            "제품명", "제품가격", "PV", "결재방법",
+            "주문자_고객명", "주문자_휴대폰번호", "배송처", "수령확인"
+        ]
+        sheet.append_row(headers)
+        values = [headers]
+
+    # ✅ 항상 맨 위(2행)에 삽입
+    sheet.insert_row(row, index=2)
+
+    # ✅ 최신 주문(2행) 조회
+    latest = sheet.row_values(2)
+    headers = values[0]
+    latest_order = dict(zip(headers, latest))
+
+    return {
+        "http_status": 200,
+        "status": "ok",
+        "message": "✅ 주문이 새로 저장되었습니다.",
+        "latest_order": latest_order
+    }
 
 
 

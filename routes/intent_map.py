@@ -29,9 +29,11 @@ from routes.routes_image import upload_image_func, search_image_func
 
 
 # routes/intent_map.py
-from parser import parse_and_save_order
+from routes.routes_order import parse_and_save_order  # ✅ 올바른 경로
 
-from parser import handle_product_order
+
+from routes.routes_order import handle_product_order  # routes 폴더 내 라우터 기반 처리 함수
+
 
 
 

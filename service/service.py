@@ -321,44 +321,7 @@ def search_in_sheet(sheet_name, keywords, search_mode="any", start_date=None, en
 
 
 
-def handle_order_save(data: dict):
-    sheet = get_worksheet("제품주문")
-    if not sheet: raise Exception("제품주문 시트를 찾을 수 없습니다.")
-    order_date = process_order_date(data.get("주문일자", ""))
-    row = [
-        order_date, data.get("회원명", ""), data.get("회원번호", ""), data.get("휴대폰번호", ""),
-        data.get("제품명", ""), float(data.get("제품가격", 0)), float(data.get("PV", 0)),
-        data.get("결재방법", ""), data.get("주문자_고객명", ""), data.get("주문자_휴대폰번호", ""),
-        data.get("배송처", ""), data.get("수령확인", "")
-    ]
-    values = sheet.get_all_values()
-    if not values:
-        headers = ["주문일자", "회원명", "회원번호", "휴대폰번호", "제품명", "제품가격", "PV", "결재방법",
-                   "주문자_고객명", "주문자_휴대폰번호", "배송처", "수령확인"]
-        sheet.append_row(headers)
-    for existing in values[1:]:
-        if existing[0] == order_date and existing[1] == data.get("회원명") and existing[4] == data.get("제품명"):
-            print("⚠️ 이미 동일한 주문이 존재하여 저장하지 않음")
-            return
-    sheet.insert_row(row, index=2)
 
-
-
-
-
-
-
-
-
-def handle_product_order(text: str, member_name: str):
-    try:
-        from parser import parse_order_text
-        parsed = parse_order_text(text)
-        parsed["회원명"] = member_name
-        handle_order_save(parsed)
-        return {"message": f"{member_name}님의 제품주문 저장이 완료되었습니다."}
-    except Exception as e:
-        return {"error": f"제품주문 처리 중 오류 발생: {str(e)}"}
 
 
 def save_order_to_sheet(order: dict) -> bool:

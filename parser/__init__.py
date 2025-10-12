@@ -43,9 +43,9 @@ from .parse import (
     parse_order_text,
     ensure_orders_list,
     parse_order_text_rule,
-    handle_order_save,   # ✅ 이제 parser 소속으로 관리
-    parse_and_save_order,
-    handle_product_order,
+    
+   
+    
 )
 
 # --------------------------
@@ -76,8 +76,8 @@ __all__ = [
     "parse_request_line", "parse_memo",
 
     # 주문 파서
-    "parse_order_text", "ensure_orders_list", "parse_order_text_rule", "handle_order_save",
-    "parse_and_save_order", "handle_product_order",
+    "parse_order_text", "ensure_orders_list", "parse_order_text_rule", 
+
     # 후원수당 파서
     "process_date", "clean_commission_data", "parse_commission",
 ]
