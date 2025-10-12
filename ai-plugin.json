@@ -1,0 +1,15 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Memberslist 제품주문",
+  "name_for_model": "memberslist_order_plugin",
+  "description_for_human": "제품주문 이미지를 분석하고 Google Sheets에 자동 저장합니다.",
+  "description_for_model": "이미지를 분석(OCR)하여 제품명, 가격, PV, 주소 등을 추출한 후 JSON으로 전송해 시트에 저장합니다.",
+  "auth": { "type": "none" },
+  "api": {
+    "type": "openapi",
+    "url": "https://memberslist.onrender.com/openapi.json"
+  },
+  "logo_url": "https://memberslist.onrender.com/static/logo.png",
+  "contact_email": "support@memberslist.kr",
+  "legal_info_url": "https://memberslist.kr/policy"
+}

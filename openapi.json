@@ -6,7 +6,9 @@
     "description": "구글 스프레드시트를 기반으로 한 회원/주문/메모/후원수당 관리 API"
   },
   "servers": [
-    { "url": "https://memberslist.onrender.com" }
+    {
+      "url": "https://memberslist.onrender.com"
+    }
   ],
   "paths": {
     "/": {
@@ -15,17 +17,9 @@
         "description": "서버 정상 실행 여부 확인",
         "operationId": "getHealthCheck",
         "responses": {
-          "200": { "description": "Flask 서버 실행 메시지" }
-        }
-      }
-    },
-    "/openapi.json": {
-      "get": {
-        "summary": "OpenAPI 스펙",
-        "description": "현재 API의 OpenAPI JSON 스펙 반환",
-        "operationId": "getOpenapiSpec",
-        "responses": {
-          "200": { "description": "OpenAPI JSON 스펙 반환" }
+          "200": {
+            "description": "Flask 서버 실행 메시지"
+          }
         }
       }
     },
@@ -36,85 +30,38 @@
         "operationId": "getDebugSheets",
         "parameters": [
           {
-            "name": "sheet",
             "in": "query",
-            "description": "조회할 시트명 (예: DB, 제품주문, 상담일지)",
-            "schema": { "type": "string" }
+            "name": "sheet",
+            "schema": { "type": "string" },
+            "description": "조회할 시트명 (예: DB, 제품주문, 상담일지)"
           }
         ],
         "responses": {
-          "200": { "description": "시트 목록 또는 헤더 반환" },
-          "500": { "description": "시트 조회 오류" }
-        }
-      }
-    },
-    "/postIntent": {
-      "post": {
-        "summary": "자연어 intent 처리",
-        "description": "자연어 입력을 intent와 query dict로 변환하여 실행",
-        "operationId": "postIntent",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/NLURequest" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "intent 처리 성공" },
-          "400": { "description": "요청 오류" }
-        }
-      }
-    },
-    "/guess_intent": {
-      "post": {
-        "summary": "intent 실행 게이트웨이",
-        "description": "nlu_to_pc_input에서 intent를 추출하고 INTENT_MAP을 통해 실행",
-        "operationId": "guessIntentEntry",
-        "responses": {
-          "200": { "description": "intent 실행 성공" },
-          "400": { "description": "지원하지 않는 intent" }
+          "200": { "description": "시트 목록 또는 헤더 반환" }
         }
       }
     },
     "/member": {
       "post": {
         "summary": "회원 관련 API",
-        "description": "회원 intent 기반 단일 라우트 (조회/등록/수정/삭제)",
+        "description": "회원 intent 기반 단일 라우트",
         "operationId": "postMember",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/MemberRequest" }
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": { "type": "string" }
+                },
+                "required": ["query"]
+              }
             }
           }
         },
         "responses": {
           "200": { "description": "회원 관련 처리 성공" },
-          "400": { "description": "요청 오류" }
-        }
-      }
-    },
-    "/order": {
-      "post": {
-        "summary": "주문 관련 API",
-        "description": "제품 주문 intent 기반 단일 라우트",
-        "operationId": "postOrder",
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/OrderRequest" }
-            },
-            "multipart/form-data": {
-              "schema": { "$ref": "#/components/schemas/OrderFileUpload" }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "주문 처리 성공" },
           "400": { "description": "요청 오류" }
         }
       }
@@ -128,7 +75,13 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/MemoRequest" }
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": { "type": "string" }
+                },
+                "required": ["query"]
+              }
             }
           }
         },
@@ -138,16 +91,75 @@
         }
       }
     },
+    "/order": {
+      "post": {
+        "summary": "제품 주문 저장",
+        "description": "GPT가 OCR로 추출한 주문 정보를 JSON 형태로 전송하여 Google Sheets '제품주문' 시트에 저장합니다.",
+        "operationId": "postOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string", "example": "이태수 제품주문 저장" },
+                  "orders": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "제품명": { "type": "string", "example": "애터미 징코앤낫토" },
+                        "제품가격": { "type": "number", "example": 25800 },
+                        "PV": { "type": "number", "example": 9500 },
+                        "주문자_고객명": { "type": "string", "example": "이태수" },
+                        "주문자_휴대폰번호": { "type": "string", "example": "010-2759-9001" },
+                        "배송처": { "type": "string", "example": "[41518] 대구 북구 산격2동 1659번지" }
+                      }
+                    }
+                  }
+                },
+                "required": ["text", "orders"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "제품 주문 저장 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "2건 저장 완료" },
+                    "orders": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "요청 형식 오류" },
+          "500": { "description": "서버 내부 오류" }
+        }
+      }
+    },
     "/commission": {
       "post": {
         "summary": "후원수당 관련 API",
-        "description": "후원수당 intent 기반 단일 라우트",
+        "description": "intent 기반 단일 라우트",
         "operationId": "postCommission",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CommissionRequest" }
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" }
+                },
+                "required": ["text"]
+              }
             }
           }
         },
@@ -156,90 +168,86 @@
           "400": { "description": "요청 오류" }
         }
       }
-    }
-  },
-  "components": {
-    "schemas": {
-      "NLURequest": {
-        "type": "object",
-        "properties": {
-          "text": { "type": "string" },
-          "query": { "type": "string" }
+    },
+    "/upload_image": {
+      "post": {
+        "summary": "이미지 업로드 및 시트 기록",
+        "description": "Google Drive에 이미지를 업로드하고, '이미지메모' 시트에 [날짜, 회원명, 이미지링크, 설명]으로 기록합니다.",
+        "operationId": "postUploadImage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "업로드할 이미지 파일"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "이미지 설명 (예: 둥이들 사진입니다)"
+                  }
+                },
+                "required": ["image"]
+              }
+            }
+          }
         },
-        "minProperties": 1
-      },
-      "MemberRequest": {
-        "type": "object",
-        "oneOf": [
+        "responses": {
+          "200": { "description": "✅ 업로드 및 시트 기록 완료" },
+          "400": { "description": "요청 오류 (image 필드 누락 등)" },
+          "500": { "description": "서버 내부 오류" }
+        }
+      }
+    },
+    "/search_image": {
+      "get": {
+        "summary": "이미지메모 검색",
+        "description": "이미지메모 시트에서 회원명 또는 설명(키워드)에 해당하는 이미지 검색",
+        "operationId": "getSearchImage",
+        "parameters": [
           {
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"]
-          },
-          {
-            "properties": {
-              "회원명": { "type": "string" },
-              "회원번호": { "type": "string" },
-              "휴대폰번호": { "type": "string" }
-            }
+            "in": "query",
+            "name": "keyword",
+            "schema": { "type": "string" },
+            "required": true,
+            "description": "검색 키워드 (예: 홍길동, 다이어트)"
           }
-        ]
-      },
-      "OrderRequest": {
-        "type": "object",
-        "oneOf": [
-          {
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"]
-          },
-          {
-            "properties": {
-              "주문회원": { "type": "string" },
-              "상품": { "type": "string" },
-              "수량": { "type": "integer" },
-              "결제": { "type": "string" },
-              "date": { "type": "string", "format": "date" }
-            }
-          }
-        ]
-      },
-      "OrderFileUpload": {
-        "type": "object",
-        "properties": {
-          "file": { "type": "string", "format": "binary" }
+        ],
+        "responses": {
+          "200": { "description": "검색 결과 반환 (JSON)" },
+          "400": { "description": "검색어 누락 또는 잘못된 요청" }
         }
       },
-      "MemoRequest": {
-        "type": "object",
-        "oneOf": [
-          {
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"]
-          },
-          {
-            "properties": {
-              "회원명": { "type": "string" },
-              "내용": { "type": "string" },
-              "일지종류": { "type": "string" }
-            },
-            "required": ["회원명", "내용", "일지종류"]
-          }
-        ]
-      },
-      "CommissionRequest": {
-        "type": "object",
-        "oneOf": [
-          {
-            "properties": { "text": { "type": "string" } },
-            "required": ["text"]
-          },
-          {
-            "properties": {
-              "회원명": { "type": "string" },
-              "기간": { "type": "string" },
-              "월": { "type": "string" }
+      "post": {
+        "summary": "이미지메모 검색 (POST)",
+        "description": "POST 방식으로 keyword를 포함한 JSON 요청으로 검색 수행",
+        "operationId": "postSearchImage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keyword": {
+                    "type": "string",
+                    "description": "검색어 (예: 홍길동, 다이어트)"
+                  }
+                },
+                "required": ["keyword"]
+              }
             }
           }
-        ]
+        },
+        "responses": {
+          "200": { "description": "검색 성공 (이미지 목록 반환)" },
+          "400": { "description": "요청 오류" },
+          "500": { "description": "서버 내부 오류" }
+        }
       }
     }
   }

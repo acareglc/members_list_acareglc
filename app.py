@@ -1091,79 +1091,74 @@ def memo_route():
 # ======================================================================================
 # ✅ 제품주문 (자동 분기) intent 기반 단일 라우트
 # ======================================================================================
+# -------------------------------
+# 2️⃣ ChatGPT Actions용 manifest 제공
+# -------------------------------
+@app.route("/ai-plugin.json")
+def serve_manifest():
+    return send_from_directory(".", "ai-plugin.json", mimetype="application/json")
+
+
+
+@app.route("/openapi.json")
+def serve_openapi():
+    return send_from_directory(".", "openapi.json", mimetype="application/json")
+
+
+
+
+# -------------------------------
+# 3️⃣ 제품주문 저장 API
+# -------------------------------
 @app.route("/order", methods=["POST"])
-def order_route():
+def post_order():
     """
-    주문 관련 API (intent 기반 단일 엔드포인트)
-    - before_request 에서 g.query["intent"] 세팅됨
-    - 자연어 입력이면 postIntent로 우회
-    - 파일 업로드면 order_upload 바로 처리
+    GPT가 OCR한 주문 정보를 JSON으로 전송하는 엔드포인트
+    ex) { "text": "이태수 제품주문 저장", "orders": [ {...}, {...} ] }
     """
     try:
-        # 0) 파일 업로드 우선 처리 (multipart/form-data)
-        if hasattr(request, "files") and request.files:
-            if not hasattr(g, "query") or not isinstance(g.query, dict):
-                g.query = {"intent": "order_upload_pc", "query": {}}
-            result = ORDER_INTENTS.get("order_upload_pc", order_upload_pc_func)()
+        data = request.get_json(force=True)
+        text = data.get("text", "").strip()
+        orders = data.get("orders", [])
 
+        if not text or not orders:
+            return jsonify({"error": "요청 형식 오류: text 또는 orders 누락"}), 400
 
-            if isinstance(result, dict):
-                return jsonify(result), result.get("http_status", 200)
-            if isinstance(result, list):
-                return jsonify(result), 200
-            return jsonify({"status": "error", "message": "알 수 없는 반환 형식"}), 500
+        # ✅ Google Sheets "제품주문" 시트 연결
+        sheet = get_worksheet("제품주문")
+        today = datetime.now().strftime("%Y-%m-%d")
 
-        data = getattr(g, "query", {}) or {}
-        q = data.get("query")
+        rows_to_add = []
+        for o in orders:
+            row = [
+                today,                           # 주문일자
+                o.get("주문자_고객명"),            # 회원명
+                "", "",                           # 회원번호, 휴대폰번호 (생략)
+                o.get("제품명"),
+                o.get("제품가격"),
+                o.get("PV"),
+                "",                               # 결제방법
+                o.get("주문자_고객명"),
+                o.get("주문자_휴대폰번호"),
+                o.get("배송처"),
+                ""                                # 수령확인
+            ]
+            rows_to_add.append(row)
 
-        # 1) 자연어 판단
-        if isinstance(q, str):
-            return post_intent()
-        if isinstance(q, dict):
-            structured_keys = {"items", "상품", "order", "주문", "주문회원", "member", "수량", "결제", "date"}
-            text_like_keys = {"text", "요청문", "주문문", "내용"}
-            if any(k in q for k in text_like_keys) and not any(k in q for k in structured_keys):
-                return post_intent()
+        # ✅ Google Sheets에 데이터 추가
+        sheet.append_rows(rows_to_add)
 
-        # 2) intent 기반 실행
-        intent = data.get("intent")
-        func = ORDER_INTENTS.get(intent)
-
-        if not func:
-            return jsonify({
-                "status": "error",
-                "message": f"❌ 처리할 수 없는 주문 intent입니다. (intent={intent})",
-            }), 400
-
-        result = func()
-
-        # ✅ 결과 처리
-        if isinstance(result, dict):
-            http_status = result.get("http_status", 200)
-            response = {
-                "http_status": http_status,
-                "intent": intent,
-                "status": result.get("status", "ok"),
-            }
-            if result.get("saved_row"):
-                response["saved_row"] = result["saved_row"]
-            if result.get("message"):
-                response["message"] = result["message"]
-            return jsonify(response), http_status
-
-        elif isinstance(result, list):  # 조회 결과
-            return jsonify(result), 200
-
-        else:
-            return jsonify({"status": "error", "message": "알 수 없는 반환 형식"}), 500
+        print(f"[INFO] {len(rows_to_add)}건 주문 저장 완료")
+        return jsonify({
+            "message": f"{len(rows_to_add)}건 저장 완료",
+            "orders": orders
+        })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "status": "error",
-            "message": f"주문 처리 중 오류 발생: {str(e)}"
-        }), 500
+        print("❌ 주문 저장 중 오류:", str(e))
+        return jsonify({"error": str(e)}), 500
+    
+
 
 
 
@@ -1258,6 +1253,15 @@ def search_image_route():
         request.args = args_copy
 
     return search_image_func()
+
+
+
+
+
+
+
+
+
 
 
 
