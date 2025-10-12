@@ -1534,6 +1534,61 @@ def parse_order_text_rule(text: str) -> dict:
 
 
 
+def handle_product_order(data):
+    """자연어 기반 제품주문 처리 함수"""
+    try:
+        return parse_and_save_order(data)
+    except Exception as e:
+        return {"status": "error", "message": f"제품주문 처리 중 오류: {e}"}
+
+
+
+
+def parse_and_save_order(data: dict):
+    """
+    자연어 기반 제품 주문 문장 → 필드 파싱 → 시트 저장
+    예: "이태수 제품주문 저장 애터미 징코앤낫토 2개 카드결제"
+    """
+    query = data.get("query", "").strip()
+    if not query:
+        return {"status": "error", "message": "❌ query 값이 없습니다."}
+
+    # ✅ 회원명 추출
+    member_match = re.search(r"(\S+)\s*제품주문", query)
+    member_name = member_match.group(1) if member_match else ""
+
+    # ✅ 제품명 + 수량 추출
+    product_match = re.findall(r"([가-힣A-Za-z0-9&]+)\s*(\d+)?개?", query)
+    if not product_match:
+        return {"status": "error", "message": "❌ 제품명이 인식되지 않았습니다."}
+
+    results = []
+    for prod, qty in product_match:
+        order_data = {
+            "주문일자": datetime.now().strftime("%Y-%m-%d"),
+            "회원명": member_name,
+            "회원번호": "",
+            "휴대폰번호": "",
+            "제품명": prod,
+            "제품가격": 0,
+            "PV": 0,
+            "결재방법": "카드",
+            "주문자_고객명": member_name,
+            "주문자_휴대폰번호": "",
+            "배송처": "",
+            "수령확인": "",
+        }
+
+        res = handle_order_save(order_data)
+        results.append(res.get("latest_order", order_data))
+
+    return {
+        "status": "success",
+        "message": f"✅ {len(results)}건 제품주문 저장 완료",
+        "saved_orders": results
+    }
+
+
 
 
 
@@ -1585,6 +1640,25 @@ def handle_order_save(data: dict):
         "message": "✅ 주문이 새로 저장되었습니다.",
         "latest_order": latest_order
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

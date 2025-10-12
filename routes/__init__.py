@@ -55,6 +55,7 @@ from .routes_order import (
     order_auto_func,
     save_order_proxy_func,
     addOrders,
+    handle_product_order,
 )
 
 
@@ -99,6 +100,7 @@ __all__ = [
     "order_auto_func",
     "save_order_proxy_func",
     "addOrders",
+    "handle_product_order",
 
     # 후원수당
     "commission_find_auto_func", "find_commission_func", "search_commission_by_nl_func",

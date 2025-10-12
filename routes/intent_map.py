@@ -28,6 +28,14 @@ from routes.routes_commission import (
 from routes.routes_image import upload_image_func, search_image_func
 
 
+# routes/intent_map.py
+from parser import parse_and_save_order
+
+from parser import handle_product_order
+
+
+
+
 # ======================================================================================
 # intent_map
 # ======================================================================================
@@ -77,6 +85,8 @@ ORDER_INTENTS = {
     "order_nl": order_nl_func,
     "order_auto": order_auto_func,
     "save_order_proxy": save_order_proxy_func,
+    "handle_product_order": handle_product_order,
+
 }
 
 
@@ -97,6 +107,11 @@ INTENT_MAP = {
     **IMAGE_INTENTS,  # ✅ 추가
     **ORDER_INTENTS,
     **COMMISSION_INTENTS,
+ 
+
 }
+
+
+
 
 

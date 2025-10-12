@@ -1124,39 +1124,34 @@ def post_order():
         if not text or not orders:
             return jsonify({"error": "요청 형식 오류: text 또는 orders 누락"}), 400
 
-        # ✅ Google Sheets "제품주문" 시트 연결
-        sheet = get_worksheet("제품주문")
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        rows_to_add = []
+        # ✅ 개별 주문 처리 (handle_order_save로 분리)
+        saved = []
         for o in orders:
-            row = [
-                today,                           # 주문일자
-                o.get("주문자_고객명"),            # 회원명
-                "", "",                           # 회원번호, 휴대폰번호 (생략)
-                o.get("제품명"),
-                o.get("제품가격"),
-                o.get("PV"),
-                "",                               # 결제방법
-                o.get("주문자_고객명"),
-                o.get("주문자_휴대폰번호"),
-                o.get("배송처"),
-                ""                                # 수령확인
-            ]
-            rows_to_add.append(row)
+            res = handle_order_save({
+                "주문일자": datetime.now().strftime("%Y-%m-%d"),
+                "회원명": o.get("주문자_고객명", ""),
+                "회원번호": "",
+                "휴대폰번호": "",
+                "제품명": o.get("제품명", ""),
+                "제품가격": o.get("제품가격", 0),
+                "PV": o.get("PV", 0),
+                "결재방법": "",
+                "주문자_고객명": o.get("주문자_고객명", ""),
+                "주문자_휴대폰번호": o.get("주문자_휴대폰번호", ""),
+                "배송처": o.get("배송처", ""),
+                "수령확인": ""
+            })
+            saved.append(res.get("latest_order", {}))
 
-        # ✅ Google Sheets에 데이터 추가
-        sheet.append_rows(rows_to_add)
-
-        print(f"[INFO] {len(rows_to_add)}건 주문 저장 완료")
         return jsonify({
-            "message": f"{len(rows_to_add)}건 저장 완료",
-            "orders": orders
-        })
+            "message": f"{len(saved)}건 저장 완료",
+            "saved_orders": saved
+        }), 200
 
     except Exception as e:
         print("❌ 주문 저장 중 오류:", str(e))
         return jsonify({"error": str(e)}), 500
+
     
 
 

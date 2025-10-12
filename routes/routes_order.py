@@ -434,7 +434,6 @@ def order_auto_func():
 
 
 
-from parser import handle_order_save 
 
 # ===================== 주문 처리 함수 =====================
 def order_upload_pc_func():
