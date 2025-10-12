@@ -1415,18 +1415,24 @@ def parse_order_text(text: str) -> Dict[str, Any]:
     text = (text or "").strip()
     query: Dict[str, Any] = {}
 
-    # ✅ 회원명
+    print(f"[🔍] parse_order_text: 원문 텍스트 = {text}")
+
     member = find_member_in_text(text)
     query["회원명"] = member if member else None
+    print(f"[✅] 회원명 추출 = {query['회원명']}")
 
-    # ✅ 제품명 + 수량 (예: 노니 2개, 홍삼 3박스, 치약 1병)
     prod_match = re.search(r"([\w가-힣]+)\s*(\d+)\s*(개|박스|병|포)?", text)
     if prod_match:
         query["제품명"] = prod_match.group(1)
         query["수량"] = int(prod_match.group(2))
+        print(f"[✅] 제품명 = {query['제품명']}, 수량 = {query['수량']}")
     else:
+        print("[⚠️] 제품명/수량 파싱 실패")
         query["제품명"] = "제품"
         query["수량"] = 1
+
+
+
 
     # ✅ 결제방법
     if "카드" in text:
@@ -1447,6 +1453,14 @@ def parse_order_text(text: str) -> Dict[str, Any]:
     query["주문일자"] = process_order_date(text)
 
     return query
+
+
+
+
+
+
+
+
 
 
 # ===============================================

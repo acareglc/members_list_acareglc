@@ -693,20 +693,27 @@ def parse_and_save_order(data: dict):
 # 주문 저장 함수
 # -----------------------------
 def handle_order_save(data: dict):
+    print(f"[📦] 저장 요청 데이터 = {data}")
+
     sheet = get_worksheet("제품주문")
     if not sheet:
+        print("❌ 제품주문 시트 없음")
+
         return {"http_status": 500, "status": "error", "message": "제품주문 시트를 찾을 수 없습니다."}
 
     # ✅ 주문일자 변환
     order_date = process_order_date(data.get("주문일자", ""))
+    print(f"[📅] 주문일자 변환 = {order_date}")
     row = [
         order_date, data.get("회원명", ""), data.get("회원번호", ""), data.get("휴대폰번호", ""),
         data.get("제품명", ""), float(data.get("제품가격", 0)), float(data.get("PV", 0)),
         data.get("결재방법", ""), data.get("주문자_고객명", ""), data.get("주문자_휴대폰번호", ""),
         data.get("배송처", ""), data.get("수령확인", "")
     ]
-
+    print(f"[📋] 삽입할 row 데이터 = {row}")
+    
     values = sheet.get_all_values()
+    print(f"[📑] 기존 시트 row 수 = {len(values)}")
 
     # ✅ 헤더 없으면 생성
     if not values:
@@ -720,9 +727,12 @@ def handle_order_save(data: dict):
 
     # ✅ 항상 맨 위(2행)에 삽입
     sheet.insert_row(row, index=2)
+    print("✅ 시트에 row 삽입 완료")
 
     # ✅ 최신 주문(2행) 조회
     latest = sheet.row_values(2)
+    print(f"[📦] 최신 저장 결과: {latest}")
+    
     headers = values[0]
     latest_order = dict(zip(headers, latest))
 

@@ -1119,15 +1119,21 @@ def post_order():
     """
     try:
         data = request.get_json(force=True)
+        print(f"[🚀] /order 요청 수신: {data}")
+        
         text = data.get("text", "").strip()
         orders = data.get("orders", [])
 
         if not text or not orders:
+            print("❌ text 또는 orders 누락")
+
             return jsonify({"error": "요청 형식 오류: text 또는 orders 누락"}), 400
 
         # ✅ 개별 주문 처리 (handle_order_save로 분리)
         saved = []
         for o in orders:
+            print(f"[🔄] 개별 주문 처리 중: {o}")
+
             res = handle_order_save({
                 "주문일자": datetime.now().strftime("%Y-%m-%d"),
                 "회원명": o.get("주문자_고객명", ""),
@@ -1142,6 +1148,8 @@ def post_order():
                 "배송처": o.get("배송처", ""),
                 "수령확인": ""
             })
+            print(f"[✅] 저장 결과: {res}")
+            
             saved.append(res.get("latest_order", {}))
 
         return jsonify({
