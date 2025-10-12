@@ -1446,10 +1446,7 @@ def parse_order_text(text: str) -> Dict[str, Any]:
     # ✅ 주문일자 (오늘/내일/어제/2025-09-11)
     query["주문일자"] = process_order_date(text)
 
-    return {
-        "intent": "order_auto",
-        "query": query
-    }
+    return query
 
 
 # ===============================================
