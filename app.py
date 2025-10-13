@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from flask import request, jsonify
 from flask import g
 
+import logging
+
 # =================================================
 # 외부 라이브러리
 # =================================================
@@ -1126,7 +1128,7 @@ def serve_openapi():
     return send_from_directory(".", "openapi.json", mimetype="application/json")
 
 
-
+logging.basicConfig(level=logging.DEBUG)  # 디버그 레벨로 설정
 
 # -------------------------------
 # 3️⃣ 제품주문 저장 API
@@ -1161,6 +1163,7 @@ def post_order():
         data = request.get_json(force=True)
         print(f"📦 수신 데이터: {data}")
 
+        app.logger.debug(f"📥 요청 데이터: {data}")
 
         text = data.get("text", "").strip() if isinstance(data, dict) else ""
         orders = data.get("orders", []) if isinstance(data, dict) else []
@@ -1202,20 +1205,31 @@ def post_order():
                 saved.append(res.get("latest_order", {}))
 
             print(f"[✅] OCR 기반 저장 완료: {len(saved)}건")
-            return jsonify({
+
+            response_data = {
                 "status": "success",
                 "message": f"{len(saved)}건 저장 완료",
                 "saved_orders": saved
-            }), 200
+            }                
+            app.logger.debug(f"📤 응답 데이터: {response_data}")  # ✅ 여기에 추가!                    
+            return jsonify(response_data), 200
 
         # ✅ (3) 요청 형식 오류 처리
         print(f"[❌] 요청 형식 오류 - text: {text}, orders: {orders}")
-        return jsonify({"error": "요청 형식 오류: text 또는 orders 누락"}), 400
+
+        response_data = {"error": "요청 형식 오류: text 또는 orders 누락"}
+        app.logger.debug(f"📤 응답 데이터: {response_data}")  # ✅ 여기에 추가!
+
+        return jsonify(response_data), 400
 
     except Exception as e:
         print(f"🔥 [STEP 9️⃣] 주문 처리 중 예외 발생: {e}")
         import traceback
         traceback.print_exc()
+
+        response_data = {"status": "error", "message": str(e)}
+        app.logger.debug(f"📤 응답 데이터: {response_data}")  # ✅ 여기에 추가!
+
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -1327,6 +1341,7 @@ def search_image_route():
 
 
 
+# 정상
 
 
 
