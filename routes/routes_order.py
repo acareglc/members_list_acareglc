@@ -219,22 +219,33 @@ def order_upload_func():
 
 def save_order_proxy_func():
     """
-    구조화 JSON 주문 저장
-    - g.query["query"] dict 기반
+    자연어 또는 JSON 기반 주문 정보를 저장하는 proxy 함수
+    - 자연어가 포함된 경우: parse_order_text()로 파싱 후 저장
     """
     try:
-        payload = g.query.get("query") if hasattr(g, "query") and isinstance(g.query, dict) else None
-        if not isinstance(payload, dict):
-            return {"status": "error", "message": "주문 JSON(payload)이 필요합니다.", "http_status": 400}
+        # ✅ g.query["query"]에서 원본 가져오기
+        query = g.query.get("query", {}) if hasattr(g, "query") else {}
+        if not isinstance(query, dict):
+            return {"status": "error", "message": "주문 JSON(query)이 필요합니다.", "http_status": 400}
+
+        # ✅ raw_text 있으면 파싱 실행
+        if "raw_text" in query:
+            from parser.parse import parse_order_text
+            print(f"[DEBUG] raw_text: {query.get('raw_text')}")
+
+            parsed = parse_order_text(query["raw_text"])  # <- 이 함수는 Dict[str, Any] 반환해야 함
+            print(f"[DEBUG] 파싱된 주문정보: {parsed}")
+
+            query.update(parsed)  # <- 필드 병합
 
         # 필드 보정
-        if "회원명" in payload and "주문회원" not in payload:
-            payload["주문회원"] = payload["회원명"]
-        if "member" in payload and "주문회원" not in payload:
-            payload["주문회원"] = payload["member"]
+        if "회원명" in query and "주문회원" not in query:
+            query["주문회원"] = query["회원명"]
+        if "member" in query and "주문회원" not in query:
+            query["주문회원"] = query["member"]
 
         # ✅ 주문 저장 실행
-        res = handle_order_save(payload)
+        res = handle_order_save(query)
 
         return {
             "status": res.get("status", "error"),
@@ -245,9 +256,6 @@ def save_order_proxy_func():
     except Exception as e:
         import traceback; traceback.print_exc()
         return {"status": "error", "message": str(e), "http_status": 500}
-
-
-
 
 
 
@@ -693,7 +701,10 @@ def parse_and_save_order(data: dict):
 # 주문 저장 함수
 # -----------------------------
 def handle_order_save(data: dict):
-    print(f"[📦] 저장 요청 데이터 = {data}")
+    print("\n" + "-"*70)
+    print("📦 [STEP H1] handle_order_save() 진입")
+    print(f"📋 입력 데이터: {data}")
+
 
     sheet = get_worksheet("제품주문")
     if not sheet:
@@ -703,12 +714,20 @@ def handle_order_save(data: dict):
 
     # ✅ 주문일자 변환
     order_date = process_order_date(data.get("주문일자", ""))
-    print(f"[📅] 주문일자 변환 = {order_date}")
+    print(f"📅 주문일자: {order_date}, 👤 회원명: {data.get('회원명')}, 🛍 제품명: {data.get('제품명')}")
+
     row = [
-        order_date, data.get("회원명", ""), data.get("회원번호", ""), data.get("휴대폰번호", ""),
-        data.get("제품명", ""), float(data.get("제품가격", 0)), float(data.get("PV", 0)),
-        data.get("결재방법", ""), data.get("주문자_고객명", ""), data.get("주문자_휴대폰번호", ""),
-        data.get("배송처", ""), data.get("수령확인", "")
+        order_date, data.get("회원명", ""), 
+        data.get("회원번호", ""), 
+        data.get("휴대폰번호", ""),
+        data.get("제품명", ""), 
+        float(data.get("제품가격", 0)), 
+        float(data.get("PV", 0)),
+        data.get("결재방법", ""), 
+        data.get("주문자_고객명", ""), 
+        data.get("주문자_휴대폰번호", ""),
+        data.get("배송처", ""), 
+        data.get("수령확인", "")
     ]
     print(f"[📋] 삽입할 row 데이터 = {row}")
     
@@ -732,10 +751,11 @@ def handle_order_save(data: dict):
     # ✅ 최신 주문(2행) 조회
     latest = sheet.row_values(2)
     print(f"[📦] 최신 저장 결과: {latest}")
-    
+
     headers = values[0]
     latest_order = dict(zip(headers, latest))
-
+    print(f"📦 [STEP H3] 최신 저장된 주문: {latest_order}")
+    
     return {
         "http_status": 200,
         "status": "ok",

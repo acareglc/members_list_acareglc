@@ -30,6 +30,8 @@ from config import (
     SHEET_MAP,
 )
 
+
+
 # =================================================
 # 프로젝트: parser
 # =================================================
@@ -140,9 +142,7 @@ from utils import fallback_natural_search, normalize_code_query
 
 
 from routes.routes_order import handle_order_save
-
-
-
+from routes.routes_order import parse_and_save_order
 
 
 
@@ -392,12 +392,32 @@ def ensure_query_dict(query) -> dict:
 def post_intent():
     raw = request.get_json(silent=True)
 
+
+    print("\n" + "="*80)
+    print("🟢 [STEP 1️⃣] /postIntent 요청 수신")
+    print(f"📦 raw = {raw}")
+
+
+
+    # ✅ 1️⃣ OCR JSON이 포함되어 있을 경우 즉시 /order 로 포워딩
+    if isinstance(raw, dict) and "orders" in raw and isinstance(raw["orders"], list):
+        print("[🖼️] postIntent 요청 내에 OCR JSON 감지 → /order 라우트로 포워딩")
+        return post_order()  # /order 함수 직접 호출    
+
+
+
+
+
+
     if isinstance(raw, str):
         data = {"query": raw}
     elif isinstance(raw, dict):
         data = raw
     else:
         data = {}
+
+
+
 
     text = data.get("text") or data.get("query") or ""
     print(f"[DEBUG] text type: {type(text)}, value: {text}")
@@ -1110,56 +1130,94 @@ def serve_openapi():
 
 # -------------------------------
 # 3️⃣ 제품주문 저장 API
-# -------------------------------
 @app.route("/order", methods=["POST"])
 def post_order():
     """
-    GPT가 OCR한 주문 정보를 JSON으로 전송하는 엔드포인트
-    ex) { "text": "이태수 제품주문 저장", "orders": [ {...}, {...} ] }
+    GPT가 전송한 제품주문 요청을 처리하는 통합 엔드포인트
+    - 자연어 명령 또는 OCR JSON 모두 지원
+    ----------------------------------------------------
+    ① 자연어 입력 예:
+        { "text": "이태수 제품주문 저장 징코앤낫토 2개 카드결제" }
+
+    ② OCR JSON 입력 예:
+        {
+          "text": "이태수 제품주문 저장",
+          "orders": [
+            {
+              "제품명": "애터미 징코앤낫토 (60정, 2개월분)",
+              "제품가격": 25800,
+              "PV": 9500,
+              "주문자_고객명": "이태수",
+              "주문자_휴대폰번호": "010-2759-9001",
+              "배송처": "[41518] 대구 북구 산격2동 1659번지"
+            }
+          ]
+        }
+    ----------------------------------------------------
     """
     try:
+        print("\n" + "="*80)
+        print("🟢 [STEP 3️⃣] /order 진입")
         data = request.get_json(force=True)
-        print(f"[🚀] /order 요청 수신: {data}")
-        
-        text = data.get("text", "").strip()
-        orders = data.get("orders", [])
+        print(f"📦 수신 데이터: {data}")
 
-        if not text or not orders:
-            print("❌ text 또는 orders 누락")
 
-            return jsonify({"error": "요청 형식 오류: text 또는 orders 누락"}), 400
+        text = data.get("text", "").strip() if isinstance(data, dict) else ""
+        orders = data.get("orders", []) if isinstance(data, dict) else []
 
-        # ✅ 개별 주문 처리 (handle_order_save로 분리)
-        saved = []
-        for o in orders:
-            print(f"[🔄] 개별 주문 처리 중: {o}")
+        # ✅ (1) 자연어 기반 명령 감지
+        # text에 '제품주문'이 포함되어 있고 orders가 비어 있으면 자연어로 처리
+        if text and "제품주문" in text and not orders:
+            print("[🧠] 자연어 주문 요청 감지 → parse_and_save_order() 실행")
+            result = parse_and_save_order({"query": text})
+            print(f"[✅] 자연어 처리 결과: {result}")
+            return jsonify(result), 200
 
-            res = handle_order_save({
-                "주문일자": datetime.now().strftime("%Y-%m-%d"),
-                "회원명": o.get("주문자_고객명", ""),
-                "회원번호": "",
-                "휴대폰번호": "",
-                "제품명": o.get("제품명", ""),
-                "제품가격": o.get("제품가격", 0),
-                "PV": o.get("PV", 0),
-                "결재방법": "",
-                "주문자_고객명": o.get("주문자_고객명", ""),
-                "주문자_휴대폰번호": o.get("주문자_휴대폰번호", ""),
-                "배송처": o.get("배송처", ""),
-                "수령확인": ""
-            })
-            print(f"[✅] 저장 결과: {res}")
-            
-            saved.append(res.get("latest_order", {}))
+        # ✅ (2) OCR JSON 기반 요청 처리
+        if text and orders:
+            print("[🖼️] OCR 기반 주문 요청 감지 → handle_order_save() 반복 실행")
+            saved = []
+            for idx, o in enumerate(orders, start=1):
+                print(f"\n🧾 [STEP 5️⃣-{idx}] 개별 주문 처리 중")
+                print(f"📄 주문 데이터: {o}")
 
-        return jsonify({
-            "message": f"{len(saved)}건 저장 완료",
-            "saved_orders": saved
-        }), 200
+
+
+                res = handle_order_save({
+                    "주문일자": datetime.now().strftime("%Y-%m-%d"),
+                    "회원명": o.get("주문자_고객명", ""),
+                    "회원번호": "",
+                    "휴대폰번호": "",
+                    "제품명": o.get("제품명", ""),
+                    "제품가격": o.get("제품가격", 0),
+                    "PV": o.get("PV", 0),
+                    "결재방법": "",
+                    "주문자_고객명": o.get("주문자_고객명", ""),
+                    "주문자_휴대폰번호": o.get("주문자_휴대폰번호", ""),
+                    "배송처": o.get("배송처", ""),
+                    "수령확인": ""
+                })
+
+                print(f"✅ [STEP 6️⃣-{idx}] handle_order_save() 반환값 → {res}")
+                saved.append(res.get("latest_order", {}))
+
+            print(f"[✅] OCR 기반 저장 완료: {len(saved)}건")
+            return jsonify({
+                "status": "success",
+                "message": f"{len(saved)}건 저장 완료",
+                "saved_orders": saved
+            }), 200
+
+        # ✅ (3) 요청 형식 오류 처리
+        print(f"[❌] 요청 형식 오류 - text: {text}, orders: {orders}")
+        return jsonify({"error": "요청 형식 오류: text 또는 orders 누락"}), 400
 
     except Exception as e:
-        print("❌ 주문 저장 중 오류:", str(e))
-        return jsonify({"error": str(e)}), 500
+        print(f"🔥 [STEP 9️⃣] 주문 처리 중 예외 발생: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
     
 
