@@ -1134,43 +1134,108 @@ logging.basicConfig(level=logging.DEBUG)  # 디버그 레벨로 설정
 @app.route("/order", methods=["POST"])
 def post_order():
     """
-    GPT Plugin 전용 제품주문 처리 API
-    - 입력: { "query": "이태수 제품주문: 이너콜라겐 1개, 34,800원, 주문번호 ..." }
-    - 출력: { "status": "success", "message": "이태수 주문 저장 완료" }
+    GPT가 전송한 제품주문 요청을 처리하는 통합 엔드포인트
+    - 자연어 명령 또는 OCR JSON 모두 지원
+    ----------------------------------------------------
+    ① 자연어 입력 예:
+        { "text": "이태수 제품주문 저장 징코앤낫토 2개 카드결제" }
+
+    ② OCR JSON 입력 예:
+        {
+          "text": "이태수 제품주문 저장",
+          "orders": [
+            {
+              "제품명": "애터미 징코앤낫토 (60정, 2개월분)",
+              "제품가격": 25800,
+              "PV": 9500,
+              "주문자_고객명": "이태수",
+              "주문자_휴대폰번호": "010-2759-9001",
+              "배송처": "[41518] 대구 북구 산격2동 1659번지"
+            }
+          ]
+        }
+    ----------------------------------------------------
     """
     try:
-        print("\n" + "=" * 80)
-        print("🟢 [STEP 1️⃣] /order 진입")
-
+        print("\n" + "="*80)
+        print("🟢 [STEP 3️⃣] /order 진입")
         data = request.get_json(force=True)
-        print(f"📥 수신 데이터: {data}")
+        print(f"📦 수신 데이터: {data}")
 
-        query = data.get("query", "").strip()
-        if not query:
+        app.logger.debug(f"📥 요청 데이터: {data}")
+
+        text = data.get("text", "").strip() if isinstance(data, dict) else ""
+        orders = data.get("orders", []) if isinstance(data, dict) else []
+
+        # ✅ (1) 자연어 기반 명령 감지
+        # text에 '제품주문'이 포함되어 있고 orders가 비어 있으면 자연어로 처리
+        if text and "제품주문" in text and not orders:
+            print("[🧠] 자연어 주문 요청 감지 → parse_and_save_order() 실행")
+            result = parse_and_save_order({"query": text})
+            print(f"[✅] 자연어 처리 결과: {result}")
+            return jsonify(result), 200
+
+        # ✅ (2) OCR JSON 기반 요청 처리
+        if text and orders:
+            print("[🖼️] OCR 기반 주문 요청 감지 → handle_order_save() 반복 실행")
+            saved = []
+            for idx, o in enumerate(orders, start=1):
+                print(f"\n🧾 [STEP 5️⃣-{idx}] 개별 주문 처리 중")
+                print(f"📄 주문 데이터: {o}")
+
+
+
+                res = handle_order_save({
+                    "주문일자": datetime.now().strftime("%Y-%m-%d"),
+                    "회원명": o.get("주문자_고객명", ""),
+                    "회원번호": "",
+                    "휴대폰번호": "",
+                    "제품명": o.get("제품명", ""),
+                    "제품가격": o.get("제품가격", 0),
+                    "PV": o.get("PV", 0),
+                    "결재방법": "",
+                    "주문자_고객명": o.get("주문자_고객명", ""),
+                    "주문자_휴대폰번호": o.get("주문자_휴대폰번호", ""),
+                    "배송처": o.get("배송처", ""),
+                    "수령확인": ""
+                })
+
+                print(f"✅ [STEP 6️⃣-{idx}] handle_order_save() 반환값 → {res}")
+                saved.append(res.get("latest_order", {}))
+
+            print(f"[✅] OCR 기반 저장 완료: {len(saved)}건")
+
             response_data = {
-                "status": "error",
-                "message": "query 필드가 없습니다."
-            }
-            print(f"📤 응답 데이터: {response_data}")
-            return jsonify(response_data), 400
+                "status": "success",
+                "message": f"{len(saved)}건 저장 완료",
+                "saved_orders": saved
+            }                
+            app.logger.debug(f"📤 응답 데이터: {response_data}")  # ✅ 여기에 추가!                    
+            return jsonify(response_data), 200
 
-        print(f"🧠 자연어 처리 시작 → query: {query}")
-        result = parse_and_save_order({"query": query})
-        print(f"✅ 처리 결과: {result}")
+        # ✅ (3) 요청 형식 오류 처리
+        print(f"[❌] 요청 형식 오류 - text: {text}, orders: {orders}")
 
-        return jsonify(result), 200 if result.get("status") == "success" else 400
+        response_data = {"error": "요청 형식 오류: text 또는 orders 누락"}
+        app.logger.debug(f"📤 응답 데이터: {response_data}")  # ✅ 여기에 추가!
+
+        return jsonify(response_data), 400
 
     except Exception as e:
+        print(f"🔥 [STEP 9️⃣] 주문 처리 중 예외 발생: {e}")
+        import traceback
         traceback.print_exc()
+
         response_data = {
             "status": "error",
             "message": str(e)
         }
-        print(f"📤 예외 응답: {response_data}")
-        return jsonify(response_data), 500
+
+        app.logger.debug(f"📤 응답 데이터: {response_data}")
+        return jsonify(response_data), 500  # ✅ 이미 JSON이므로 이대로 반환
 
 
-    
+        
 
 
 
