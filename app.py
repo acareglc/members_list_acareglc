@@ -1362,7 +1362,7 @@ def post_order():
             print("[🧠] 자연어 주문 요청 감지 → parse_and_save_order() 실행")
             result = parse_and_save_order({"query": text})
             print(f"[✅] 자연어 처리 결과: {result}")
-            return jsonify(result), 200
+            return make_response(jsonify(result), 200)
 
         if text and orders:
             print("[🖼️] OCR 기반 주문 요청 감지 → handle_order_save() 반복 실행")
@@ -1390,15 +1390,15 @@ def post_order():
                 saved.append(res.get("latest_order", {}))
 
             print(f"[✅] OCR 기반 저장 완료: {len(saved)}건")
-            return jsonify({"status": "success", "message": f"{len(saved)}건 저장 완료", "saved_orders": saved}), 200
+            return make_response(jsonify({"status": "success", "message": f"{len(saved)}건 저장 완료", "saved_orders": saved}), 200)
 
         print(f"[❌] 요청 형식 오류 - text: {text}, orders: {orders}")
-        return jsonify({"status": "error", "message": "❌ 요청 형식 오류: text 또는 orders 누락 (multipart/form-data 여부 확인)"}), 400
+        return make_response(jsonify({"status": "error", "message": "❌ 요청 형식 오류: text 또는 orders 누락 (multipart/form-data 여부 확인)"}), 400)
 
     except Exception as e:
         print(f"🔥 주문 처리 중 예외 발생: {e}")
         traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return make_response(jsonify({"status": "error", "message": str(e)}), 500)
 
 @app.route("/jit-plugin/postOrder", methods=["POST"])
 def post_order_jit_proxy():
@@ -1415,12 +1415,12 @@ def post_order_jit_proxy():
         with app.test_request_context("/order", method="POST", json=data):
             print("🔁 내부 포워딩: /order")
             response = post_order()
-            print(f"[🔁 반환] /order 응답 → {response}")
+            print(f"[🔁 반환] /order 응답 → {response.get_data(as_text=True)}")
             return response
 
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"status": "error", "message": f"🔥 /jit-plugin/postOrder 처리 중 오류 발생: {str(e)}"}), 500
+        return make_response(jsonify({"status": "error", "message": f"🔥 /jit-plugin/postOrder 처리 중 오류 발생: {str(e)}"}), 500)
 
 @app.route("/ai-plugin.json")
 def serve_manifest():
@@ -1429,6 +1429,15 @@ def serve_manifest():
 @app.route("/openapi.json")
 def serve_openapi():
     return send_from_directory(".", "openapi.json", mimetype="application/json")
+
+
+
+
+
+
+
+
+
 
 
 
