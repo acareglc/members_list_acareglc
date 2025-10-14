@@ -1128,6 +1128,49 @@ def serve_openapi():
     return send_from_directory(".", "openapi.json", mimetype="application/json")
 
 
+
+
+
+
+# ======================================================================================
+# ✅ ChatGPT Plugin용 주문 저장 프록시 (/jit-plugin/postOrder)
+# ======================================================================================
+@app.route("/jit-plugin/postOrder", methods=["POST"])
+def post_order_jit_proxy():
+    """
+    ChatGPT 플러그인(iPad 등)에서 전송하는 주문 저장 요청 처리
+    - 스키마상의 'query' 필드를 Flask 내부 표준 'text' 필드로 변환
+    - 내부적으로 /order 라우트를 호출하여 동일하게 동작
+    """
+    try:
+        print("\n" + "="*80)
+        print("🟢 [JIT-PLUGIN] /jit-plugin/postOrder 요청 수신")
+
+        # 1️⃣ JSON 파싱
+        data = request.get_json(force=True) or {}
+        print(f"📦 원본 요청 데이터: {data}")
+
+        # 2️⃣ 'query' → 'text' 필드 자동 변환
+        if "query" in data and "text" not in data:
+            data["text"] = data["query"]
+            print(f"🧩 query → text 변환 완료: {data['text']}")
+
+        # 3️⃣ 내부 요청 컨텍스트로 /order 로직 재사용
+        with app.test_request_context("/order", method="POST", json=data):
+            print("🔁 내부 포워딩: /order")
+            return post_order()
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": f"🔥 /jit-plugin/postOrder 처리 중 오류 발생: {str(e)}"
+        }), 500
+
+
+
+
 logging.basicConfig(level=logging.DEBUG)  # 디버그 레벨로 설정
 
 # -------------------------------
@@ -1217,6 +1260,18 @@ def post_order():
         print(f"🔥 주문 처리 중 예외 발생: {e}")
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
