@@ -1206,8 +1206,10 @@ def post_order():
 
         print(f"📦 수신 데이터: {data}")
 
-        text = data.get("text", "").strip() if isinstance(data, dict) else ""
+        # 수정 후
+        text = (data.get("text") or data.get("query") or "").strip() if isinstance(data, dict) else ""
         orders = data.get("orders", []) if isinstance(data, dict) else []
+
 
         # ✅ (1) 자연어 기반 명령 처리
         if text and "제품주문" in text and not orders:
