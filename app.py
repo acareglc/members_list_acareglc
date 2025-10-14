@@ -1136,39 +1136,37 @@ def post_order():
     """
     GPT가 전송한 제품주문 요청을 처리하는 통합 엔드포인트
     - 자연어 명령 또는 OCR JSON 모두 지원
-    ----------------------------------------------------
-    ① 자연어 입력 예:
-        { "text": "이태수 제품주문 저장 징코앤낫토 2개 카드결제" }
-
-    ② OCR JSON 입력 예:
-        {
-          "text": "이태수 제품주문 저장",
-          "orders": [
-            {
-              "제품명": "애터미 징코앤낫토 (60정, 2개월분)",
-              "제품가격": 25800,
-              "PV": 9500,
-              "주문자_고객명": "이태수",
-              "주문자_휴대폰번호": "010-2759-9001",
-              "배송처": "[41518] 대구 북구 산격2동 1659번지"
-            }
-          ]
-        }
-    ----------------------------------------------------
+    - application/json 및 multipart/form-data 모두 호환
     """
     try:
         print("\n" + "="*80)
         print("🟢 [STEP 3️⃣] /order 진입")
-        data = request.get_json(force=True)
-        print(f"📦 수신 데이터: {data}")
 
-        app.logger.debug(f"📥 요청 데이터: {data}")
+        # ✅ 1️⃣ JSON 요청 우선 파싱
+        data = request.get_json(silent=True)
+
+        # ✅ 2️⃣ Vision(iPad) 요청 처리: multipart/form-data → 수동 변환
+        if not data:
+            if request.form:
+                print("📸 multipart/form-data 감지 → 수동 파싱 시도")
+                # ① text 필드
+                text = request.form.get("text") or request.form.get("query") or ""
+                # ② orders 필드 (GPT가 JSON 문자열로 넣는 경우)
+                orders_raw = request.form.get("orders") or request.form.get("payload")
+                try:
+                    orders = json.loads(orders_raw) if orders_raw else []
+                except:
+                    orders = []
+                data = {"text": text, "orders": orders}
+            else:
+                data = {}
+
+        print(f"📦 수신 데이터: {data}")
 
         text = data.get("text", "").strip() if isinstance(data, dict) else ""
         orders = data.get("orders", []) if isinstance(data, dict) else []
 
-        # ✅ (1) 자연어 기반 명령 감지
-        # text에 '제품주문'이 포함되어 있고 orders가 비어 있으면 자연어로 처리
+        # ✅ (1) 자연어 기반 명령 처리
         if text and "제품주문" in text and not orders:
             print("[🧠] 자연어 주문 요청 감지 → parse_and_save_order() 실행")
             result = parse_and_save_order({"query": text})
@@ -1182,8 +1180,6 @@ def post_order():
             for idx, o in enumerate(orders, start=1):
                 print(f"\n🧾 [STEP 5️⃣-{idx}] 개별 주문 처리 중")
                 print(f"📄 주문 데이터: {o}")
-
-
 
                 res = handle_order_save({
                     "주문일자": datetime.now().strftime("%Y-%m-%d"),
@@ -1204,38 +1200,23 @@ def post_order():
                 saved.append(res.get("latest_order", {}))
 
             print(f"[✅] OCR 기반 저장 완료: {len(saved)}건")
-
-            response_data = {
+            return jsonify({
                 "status": "success",
                 "message": f"{len(saved)}건 저장 완료",
                 "saved_orders": saved
-            }                
-            app.logger.debug(f"📤 응답 데이터: {response_data}")  # ✅ 여기에 추가!                    
-            return jsonify(response_data), 200
+            }), 200
 
-        # ✅ (3) 요청 형식 오류 처리
+        # ✅ (3) 형식 오류
         print(f"[❌] 요청 형식 오류 - text: {text}, orders: {orders}")
-
-        response_data = {"error": "요청 형식 오류: text 또는 orders 누락"}
-        app.logger.debug(f"📤 응답 데이터: {response_data}")  # ✅ 여기에 추가!
-
-        return jsonify(response_data), 400
+        return jsonify({
+            "status": "error",
+            "message": "❌ 요청 형식 오류: text 또는 orders 누락 (multipart/form-data 여부 확인)"
+        }), 400
 
     except Exception as e:
-        print(f"🔥 [STEP 9️⃣] 주문 처리 중 예외 발생: {e}")
-        import traceback
+        print(f"🔥 주문 처리 중 예외 발생: {e}")
         traceback.print_exc()
-
-        response_data = {
-            "status": "error",
-            "message": str(e)
-        }
-
-        app.logger.debug(f"📤 응답 데이터: {response_data}")
-        return jsonify(response_data), 500  # ✅ 이미 JSON이므로 이대로 반환
-
-
-        
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 
