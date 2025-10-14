@@ -1269,6 +1269,8 @@ from gspread.exceptions import WorksheetNotFound, APIError
 
 
 
+
+
 # -------------------------
 # 주문 저장 핵심 함수
 # -------------------------
@@ -1412,7 +1414,9 @@ def post_order_jit_proxy():
 
         with app.test_request_context("/order", method="POST", json=data):
             print("🔁 내부 포워딩: /order")
-            return post_order()
+            response = post_order()
+            print(f"[🔁 반환] /order 응답 → {response}")
+            return response
 
     except Exception as e:
         traceback.print_exc()
@@ -1425,10 +1429,6 @@ def serve_manifest():
 @app.route("/openapi.json")
 def serve_openapi():
     return send_from_directory(".", "openapi.json", mimetype="application/json")
-
-
-
-
 
 
 
