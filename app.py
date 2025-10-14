@@ -1111,162 +1111,6 @@ def memo_route():
 
 
 
-# ======================================================================================
-# ✅ 제품주문 (자동 분기) intent 기반 단일 라우트
-# ======================================================================================
-# -------------------------------
-# 2️⃣ ChatGPT Actions용 manifest 제공
-# -------------------------------
-@app.route("/ai-plugin.json")
-def serve_manifest():
-    return send_from_directory(".", "ai-plugin.json", mimetype="application/json")
-
-
-
-@app.route("/openapi.json")
-def serve_openapi():
-    return send_from_directory(".", "openapi.json", mimetype="application/json")
-
-
-
-
-
-
-# ======================================================================================
-# ✅ ChatGPT Plugin용 주문 저장 프록시 (/jit-plugin/postOrder)
-# ======================================================================================
-@app.route("/jit-plugin/postOrder", methods=["POST"])
-def post_order_jit_proxy():
-    """
-    ChatGPT 플러그인(iPad 등)에서 전송하는 주문 저장 요청 처리
-    - 스키마상의 'query' 필드를 Flask 내부 표준 'text' 필드로 변환
-    - 내부적으로 /order 라우트를 호출하여 동일하게 동작
-    """
-    try:
-        print("\n" + "="*80)
-        print("🟢 [JIT-PLUGIN] /jit-plugin/postOrder 요청 수신")
-
-        # 1️⃣ JSON 파싱
-        data = request.get_json(force=True) or {}
-        print(f"📦 원본 요청 데이터: {data}")
-
-        # 2️⃣ 'query' → 'text' 필드 자동 변환
-        if "query" in data and "text" not in data:
-            data["text"] = data["query"]
-            print(f"🧩 query → text 변환 완료: {data['text']}")
-
-        # 3️⃣ 내부 요청 컨텍스트로 /order 로직 재사용
-        with app.test_request_context("/order", method="POST", json=data):
-            print("🔁 내부 포워딩: /order")
-            return post_order()
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "status": "error",
-            "message": f"🔥 /jit-plugin/postOrder 처리 중 오류 발생: {str(e)}"
-        }), 500
-
-
-
-
-logging.basicConfig(level=logging.DEBUG)  # 디버그 레벨로 설정
-
-# -------------------------------
-@app.route("/order", methods=["POST"])
-def post_order():
-    """
-    GPT가 전송한 제품주문 요청을 처리하는 통합 엔드포인트
-    - 자연어 명령 또는 OCR JSON 모두 지원
-    - application/json 및 multipart/form-data 모두 호환
-    """
-    try:
-        print("\n" + "="*80)
-        print("🟢 [STEP 3️⃣] /order 진입")
-
-        # ✅ 1️⃣ JSON 요청 우선 파싱
-        data = request.get_json(silent=True)
-
-        # ✅ 2️⃣ Vision(iPad) 요청 처리: multipart/form-data → 수동 변환
-        if not data:
-            if request.form:
-                print("📸 multipart/form-data 감지 → 수동 파싱 시도")
-                # ① text 필드
-                text = request.form.get("text") or request.form.get("query") or ""
-                # ② orders 필드 (GPT가 JSON 문자열로 넣는 경우)
-                orders_raw = request.form.get("orders") or request.form.get("payload")
-                try:
-                    orders = json.loads(orders_raw) if orders_raw else []
-                except:
-                    orders = []
-                data = {"text": text, "orders": orders}
-            else:
-                data = {}
-
-        print(f"📦 수신 데이터: {data}")
-
-        # 수정 후
-        text = (data.get("text") or data.get("query") or "").strip() if isinstance(data, dict) else ""
-        orders = data.get("orders", []) if isinstance(data, dict) else []
-
-
-        # ✅ (1) 자연어 기반 명령 처리
-        if text and "제품주문" in text and not orders:
-            print("[🧠] 자연어 주문 요청 감지 → parse_and_save_order() 실행")
-            result = parse_and_save_order({"query": text})
-            print(f"[✅] 자연어 처리 결과: {result}")
-            return jsonify(result), 200
-
-        # ✅ (2) OCR JSON 기반 요청 처리
-        if text and orders:
-            print("[🖼️] OCR 기반 주문 요청 감지 → handle_order_save() 반복 실행")
-            saved = []
-            for idx, o in enumerate(orders, start=1):
-                print(f"\n🧾 [STEP 5️⃣-{idx}] 개별 주문 처리 중")
-                print(f"📄 주문 데이터: {o}")
-
-                res = handle_order_save({
-                    "주문일자": datetime.now().strftime("%Y-%m-%d"),
-                    "회원명": o.get("주문자_고객명", ""),
-                    "회원번호": "",
-                    "휴대폰번호": "",
-                    "제품명": o.get("제품명", ""),
-                    "제품가격": o.get("제품가격", 0),
-                    "PV": o.get("PV", 0),
-                    "결재방법": "",
-                    "주문자_고객명": o.get("주문자_고객명", ""),
-                    "주문자_휴대폰번호": o.get("주문자_휴대폰번호", ""),
-                    "배송처": o.get("배송처", ""),
-                    "수령확인": ""
-                })
-
-                print(f"✅ [STEP 6️⃣-{idx}] handle_order_save() 반환값 → {res}")
-                saved.append(res.get("latest_order", {}))
-
-            print(f"[✅] OCR 기반 저장 완료: {len(saved)}건")
-            return jsonify({
-                "status": "success",
-                "message": f"{len(saved)}건 저장 완료",
-                "saved_orders": saved
-            }), 200
-
-        # ✅ (3) 형식 오류
-        print(f"[❌] 요청 형식 오류 - text: {text}, orders: {orders}")
-        return jsonify({
-            "status": "error",
-            "message": "❌ 요청 형식 오류: text 또는 orders 누락 (multipart/form-data 여부 확인)"
-        }), 400
-
-    except Exception as e:
-        print(f"🔥 주문 처리 중 예외 발생: {e}")
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-
-
-
 
 
 
@@ -1381,7 +1225,211 @@ def search_image_route():
 
 
 
-# 정상
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ======================================================================================
+# ✅ 제품주문 (자동 분기) intent 기반 단일 라우트
+# ======================================================================================
+
+
+
+logging.basicConfig(level=logging.DEBUG)  # 디버그 레벨로 설정
+
+
+
+
+
+
+
+
+
+import requests
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from gspread.exceptions import WorksheetNotFound, APIError
+
+
+
+# -------------------------
+# 주문 저장 핵심 함수
+# -------------------------
+def parse_order_query(query):
+    pattern = r"(.+?) 제품주문 (.+?), (\d+)개, ([\d,]+)원, (\d+)PV"
+    match = re.match(pattern, query)
+    if match:
+        name, product, quantity, price, pv = match.groups()
+        return {
+            "회원명": name.strip(),
+            "제품명": product.strip(),
+            "수량": int(quantity),
+            "가격": int(price.replace(",", "")),
+            "PV": int(pv)
+        }
+    else:
+        return None
+
+def get_gspread_client():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if creds_json:
+        creds_dict = json.loads(creds_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    else:
+        creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+        creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+    return gspread.authorize(creds)
+
+def get_worksheet(sheet_name):
+    client = get_gspread_client()
+    sheet_title = os.getenv("GOOGLE_SHEET_TITLE", "제품주문")
+    sheet = client.open(sheet_title)
+    return sheet.worksheet(sheet_name)
+
+def save_to_google_sheet(order_data):
+    sheet = get_worksheet("제품주문")
+    sheet.append_row([
+        order_data["회원명"],
+        order_data["제품명"],
+        order_data["수량"],
+        order_data["가격"],
+        order_data["PV"]
+    ], value_input_option="USER_ENTERED")
+
+def parse_and_save_order(data):
+    query = data.get("query", "")
+    parsed = parse_order_query(query)
+    if not parsed:
+        return {"status": "fail", "message": "Query parsing failed"}
+    save_to_google_sheet(parsed)
+    return {"status": "success", "latest_order": parsed}
+
+def handle_order_save(order_data):
+    save_to_google_sheet({
+        "회원명": order_data["회원명"],
+        "제품명": order_data["제품명"],
+        "수량": 1,
+        "가격": order_data["제품가격"],
+        "PV": order_data["PV"]
+    })
+    return {"status": "success", "latest_order": order_data}
+
+@app.route("/order", methods=["POST"])
+def post_order():
+    try:
+        print("\n" + "="*80)
+        print("🟢 [STEP 3️⃣] /order 진입")
+        data = request.get_json(silent=True)
+
+        if not data:
+            if request.form:
+                print("📸 multipart/form-data 감지 → 수동 파싱 시도")
+                text = request.form.get("text") or request.form.get("query") or ""
+                orders_raw = request.form.get("orders") or request.form.get("payload")
+                try:
+                    orders = json.loads(orders_raw) if orders_raw else []
+                except:
+                    orders = []
+                data = {"text": text, "orders": orders}
+            else:
+                data = {}
+
+        print(f"📦 수신 데이터: {data}")
+        text = (data.get("text") or data.get("query") or "").strip() if isinstance(data, dict) else ""
+        orders = data.get("orders", []) if isinstance(data, dict) else []
+
+        if text and "제품주문" in text and not orders:
+            print("[🧠] 자연어 주문 요청 감지 → parse_and_save_order() 실행")
+            result = parse_and_save_order({"query": text})
+            print(f"[✅] 자연어 처리 결과: {result}")
+            return jsonify(result), 200
+
+        if text and orders:
+            print("[🖼️] OCR 기반 주문 요청 감지 → handle_order_save() 반복 실행")
+            saved = []
+            for idx, o in enumerate(orders, start=1):
+                print(f"\n🧾 [STEP 5️⃣-{idx}] 개별 주문 처리 중")
+                print(f"📄 주문 데이터: {o}")
+
+                res = handle_order_save({
+                    "주문일자": datetime.now().strftime("%Y-%m-%d"),
+                    "회원명": o.get("주문자_고객명", ""),
+                    "회원번호": "",
+                    "휴대폰번호": "",
+                    "제품명": o.get("제품명", ""),
+                    "제품가격": o.get("제품가격", 0),
+                    "PV": o.get("PV", 0),
+                    "결재방법": "",
+                    "주문자_고객명": o.get("주문자_고객명", ""),
+                    "주문자_휴대폰번호": o.get("주문자_휴대폰번호", ""),
+                    "배송처": o.get("배송처", ""),
+                    "수령확인": ""
+                })
+
+                print(f"✅ [STEP 6️⃣-{idx}] handle_order_save() 반환값 → {res}")
+                saved.append(res.get("latest_order", {}))
+
+            print(f"[✅] OCR 기반 저장 완료: {len(saved)}건")
+            return jsonify({"status": "success", "message": f"{len(saved)}건 저장 완료", "saved_orders": saved}), 200
+
+        print(f"[❌] 요청 형식 오류 - text: {text}, orders: {orders}")
+        return jsonify({"status": "error", "message": "❌ 요청 형식 오류: text 또는 orders 누락 (multipart/form-data 여부 확인)"}), 400
+
+    except Exception as e:
+        print(f"🔥 주문 처리 중 예외 발생: {e}")
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/jit-plugin/postOrder", methods=["POST"])
+def post_order_jit_proxy():
+    try:
+        print("\n" + "="*80)
+        print("🟢 [JIT-PLUGIN] /jit-plugin/postOrder 요청 수신")
+        data = request.get_json(force=True) or {}
+        print(f"📦 원본 요청 데이터: {data}")
+
+        if "query" in data and "text" not in data:
+            data["text"] = data["query"]
+            print(f"🧩 query → text 변환 완료: {data['text']}")
+
+        with app.test_request_context("/order", method="POST", json=data):
+            print("🔁 내부 포워딩: /order")
+            return post_order()
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"🔥 /jit-plugin/postOrder 처리 중 오류 발생: {str(e)}"}), 500
+
+@app.route("/ai-plugin.json")
+def serve_manifest():
+    return send_from_directory(".", "ai-plugin.json", mimetype="application/json")
+
+@app.route("/openapi.json")
+def serve_openapi():
+    return send_from_directory(".", "openapi.json", mimetype="application/json")
+
+
+
+
+
 
 
 
