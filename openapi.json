@@ -155,30 +155,25 @@
     },
     "/order": {
       "post": {
-        "summary": "제품 주문 저장 (백엔드 직접 호출용)",
-        "description": "GPT 또는 Postman에서 직접 주문 정보를 전송하여 시트에 저장합니다.",
+        "summary": "제품 주문 저장 (iPad + 이미지 지원)",
+        "description": "자연어 명령(text)과 이미지(image)를 multipart/form-data로 받아 Google Sheets '제품주문' 시트에 자동 저장합니다.",
         "operationId": "postOrder",
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "text": { "type": "string", "example": "이태수 제품주문 저장" },
-                  "orders": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "제품명": { "type": "string" },
-                        "제품가격": { "type": "number" },
-                        "PV": { "type": "number" },
-                        "주문자_고객명": { "type": "string" },
-                        "주문자_휴대폰번호": { "type": "string" },
-                        "배송처": { "type": "string" }
-                      }
-                    }
+                  "text": {
+                    "type": "string",
+                    "description": "자연어 명령 (예: '이태수 제품주문 저장')",
+                    "example": "이태수 제품주문 저장"
+                  },
+                  "image": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "첨부 이미지 (JPEG/PNG)"
                   }
                 },
                 "required": ["text"]
@@ -187,9 +182,30 @@
           }
         },
         "responses": {
-          "200": { "description": "주문 저장 성공" },
-          "400": { "description": "요청 형식 오류" },
-          "500": { "description": "서버 내부 오류" }
+          "200": {
+            "description": "✅ 주문 저장 성공",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "success" },
+                    "message": { "type": "string", "example": "1건 저장 완료" },
+                    "image_url": {
+                      "type": "string",
+                      "example": "https://memberslist.onrender.com/static/20251016_153455_order.jpg"
+                    },
+                    "saved_orders": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "❌ 요청 형식 오류" },
+          "500": { "description": "⚠️ 서버 내부 오류" }
         }
       }
     },
@@ -301,3 +317,5 @@
     }
   }
 }
+
+

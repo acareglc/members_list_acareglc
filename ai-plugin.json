@@ -1,15 +1,19 @@
 {
   "schema_version": "v1",
-  "name_for_human": "Memberslist Assistant",
-  "name_for_model": "memberslist",
-  "description_for_human": "이미지(OCR)와 자연어로 회원, 제품주문, 상담일지를 관리하는 AI 연동 시스템.",
-  "description_for_model": "AI assistant that manages product orders, members, memos, and commissions using Google Sheets. Supports both natural language and OCR (image) input.",
-  "auth": { "type": "none" },
+  "name_for_human": "Memberslist 주문 시스템",
+  "name_for_model": "memberslist_order",
+  "description_for_human": "이미지 포함 제품주문을 Google Sheets에 저장하는 API",
+  "description_for_model": "자연어 문장과 이미지를 받아 제품주문을 저장합니다. 예: '이태수 제품주문 저장' + 첨부 이미지",
+  "auth": {
+    "type": "none"
+  },
   "api": {
     "type": "openapi",
     "url": "https://memberslist.onrender.com/openapi.json"
   },
   "logo_url": "https://memberslist.onrender.com/static/logo.png",
-  "contact_email": "support@memberslist.app",
-  "legal_info_url": "https://memberslist.onrender.com/legal"
+  "contact_email": "support@memberslist.com",
+  "legal_info_url": "https://memberslist.onrender.com/terms"
 }
+
+
