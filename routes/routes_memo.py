@@ -287,10 +287,11 @@ def search_memo_core(sheet_name, keywords, member_name=None,
                      start_date=None, end_date=None, limit=20,
                      and_mode=False, full_phrase=""):
     """
-    메모 검색 Core
+    메모 검색 Core (개선 버전)
     - keywords: 검색 키워드 리스트
     - full_phrase: 키워드 전체 문장 기반 정확 검색
     - and_mode=True → 모든 키워드 포함(AND), 기본은 OR 검색
+    - 🔹 회원명과 내용 모두 검색 대상 포함
     """
     results = []
     sheet = get_worksheet(sheet_name)
@@ -318,11 +319,11 @@ def search_memo_core(sheet_name, keywords, member_name=None,
         member = str(row.get("회원명", "")).strip()
         date_str = str(row.get("날짜", "")).strip()
 
-        # ✅ 회원명 필터
+        # ✅ 회원명 필터 (특정 회원 지정 시)
         if member_name and member_name != "전체" and member != member_name:
             continue
 
-        # ✅ 날짜 필터
+        # ✅ 날짜 필터 (선택적)
         if date_str:
             try:
                 row_date = datetime.strptime(date_str.split()[0], "%Y-%m-%d")
@@ -333,19 +334,20 @@ def search_memo_core(sheet_name, keywords, member_name=None,
             except Exception:
                 pass
 
-        content_lower = content.lower()
+        # ✅ 검색 대상: 회원명 + 내용 둘 다 포함
+        search_target = f"{member.lower()} {content.lower()}"
 
         # ✅ 정확한 문장 일치 우선 검사
-        if full_phrase and full_phrase not in content_lower:
+        if full_phrase and full_phrase not in search_target:
             continue
 
         # ✅ 키워드 검사 (AND/OR)
         if keywords:
             if and_mode:
-                if not all(kw in content_lower for kw in keywords):
+                if not all(kw in search_target for kw in keywords):
                     continue
             else:
-                if not any(kw in content_lower for kw in keywords):
+                if not any(kw in search_target for kw in keywords):
                     continue
 
         results.append({
@@ -360,8 +362,6 @@ def search_memo_core(sheet_name, keywords, member_name=None,
 
     print(f"[DEBUG] ✅ 최종 results({sheet_name}) | {len(results)}건")
     return results
-
-
 
 
 
