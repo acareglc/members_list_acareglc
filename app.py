@@ -1248,98 +1248,80 @@ LOG_FOLDER = "./logs"
 os.makedirs(LOG_FOLDER, exist_ok=True)
 LOG_FILE = os.path.join(LOG_FOLDER, "order_log.txt")
 
+logging.basicConfig(level=logging.DEBUG)  # 디버그 레벨로 설정
 # ======================================================================================
 # ✅ 제품주문 (자동 분기) intent 기반 단일 라우트
 # ======================================================================================
 
-
-
-logging.basicConfig(level=logging.DEBUG)  # 디버그 레벨로 설정
-
-
-
-
-
-
-
-
 # ==========================================
-# 🔧 Google Sheets 연결
+# 📁 이미지 저장 폴더
 # ==========================================
-# ✅ utils/sheets.py의 공용 함수로 대체
-sheet = get_spreadsheet()
-
-
-
-
-
-UPLOAD_FOLDER = "./uploaded_images"  # type: str
+UPLOAD_FOLDER = "./uploaded_images"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# ==========================================
+# ✅ Google Sheets 연결
+# ==========================================
+sheet = get_spreadsheet()
 
 @app.route("/static/<path:filename>")
 def serve_uploaded_image(filename):
     """저장된 이미지를 URL로 접근 가능하게 제공"""
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-# ==========================================
-# 🧾 제품 주문 저장 (iPad + 이미지)
-# ==========================================
 
-UPLOAD_FOLDER = os.path.join(os.getcwd(), "static")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
+# ==========================================
+# 🧾 제품 주문 저장 (JSON + multipart 통합)
+# ==========================================
 @app.route("/order", methods=["POST"])
 def post_order():
     """
-    ✅ iPad ChatGPT → Flask 서버
-    자연어 명령(text) + 이미지(image) + OCR JSON(orders)
-    multipart/form-data 형태로 수신하여 Google Sheets에 저장
+    ✅ /order 통합 엔드포인트
+    - application/json (플러그인/JIT)
+    - multipart/form-data (iPad + 이미지)
+    모두 자동 인식
     """
     try:
         print("\n" + "=" * 80)
         print("🟢 [STEP 1] /order 요청 수신")
-        print(f"[DEBUG] Content-Type: {request.content_type}")
-        print(f"[DEBUG] request.form.keys(): {list(request.form.keys())}")
-        print(f"[DEBUG] request.files.keys(): {list(request.files.keys())}")
 
         # -------------------------------------------------
-        # 1️⃣ 요청 데이터 파싱
+        # 1️⃣ JSON or multipart 자동 감지
         # -------------------------------------------------
-        text = request.form.get("text", "").strip()
-        orders_raw = request.form.get("orders", "")
-        file = request.files.get("image")
+        data = request.get_json(silent=True)
+        text = ""
+        image_url = ""
+        orders = []
+
+        if data:  # JSON 요청 (ChatGPT 플러그인)
+            print("📦 JSON 기반 요청 감지")
+            text = data.get("query", "") or data.get("text", "")
+            orders = data.get("orders", [])
+        else:  # multipart/form-data 요청 (iPad 등)
+            print("📸 multipart/form-data 요청 감지")
+            text = request.form.get("text", "")
+            orders_raw = request.form.get("orders", "")
+            if orders_raw:
+                try:
+                    orders = json.loads(orders_raw)
+                except Exception as e:
+                    print("⚠️ orders JSON 파싱 실패:", e)
+            file = request.files.get("image")
+            if file:
+                filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+                save_path = os.path.join(UPLOAD_FOLDER, filename)
+                file.save(save_path)
+                image_url = f"https://memberslist.onrender.com/static/{filename}"
+                print(f"📸 이미지 저장 완료: {image_url}")
 
         if not text:
-            print("⚠️ text 값이 비어 있음")
-            return jsonify({"status": "error", "message": "❌ text 값이 없습니다."}), 400
+            return jsonify({"status": "error", "message": "❌ text/query 값이 없습니다."}), 400
 
-        print(f"📋 텍스트 명령: {text}")
-
-        # -------------------------------------------------
-        # 2️⃣ 이미지 저장 (static 경로)
-        # -------------------------------------------------
-        image_url = ""
-        if file:
-            filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
-            save_path = os.path.join(UPLOAD_FOLDER, filename)
-            file.save(save_path)
-            image_url = f"https://memberslist.onrender.com/static/{filename}"
-            print(f"📸 이미지 저장 완료: {image_url}")
-        else:
-            print("⚠️ 이미지 없음 (image 필드 미첨부)")
+        print(f"🧾 요청 텍스트: {text}")
 
         # -------------------------------------------------
-        # 3️⃣ 주문 JSON 파싱
+        # 2️⃣ orders가 비어 있으면 기본값 추가
         # -------------------------------------------------
-        try:
-            orders = json.loads(orders_raw) if orders_raw else []
-            print(f"[DEBUG] orders_raw 파싱 완료: {len(orders)}건")
-        except Exception as e:
-            print("⚠️ orders JSON 파싱 실패:", e)
-            orders = []
-
-        # 이미지만 있고 orders 없을 경우 → text 기반 기본값 생성
         if not orders:
             orders = [{
                 "주문자_고객명": "이태수" if "이태수" in text else "",
@@ -1349,33 +1331,29 @@ def post_order():
                 "주문자_휴대폰번호": "",
                 "배송처": ""
             }]
-            print("[DEBUG] 기본 order 1건 생성")
 
         # -------------------------------------------------
-        # 4️⃣ Google Sheets 저장
+        # 3️⃣ Google Sheets 저장
         # -------------------------------------------------
-        print(f"🧾 시트 저장 준비 중... (총 {len(orders)}건)")
-        # ws = sheet.worksheet("제품주문")  # 실제 운영 시 주석 해제
+        ws = sheet.worksheet("제품주문")
         saved = []
-
         for order in orders:
             row = [
-                datetime.now().strftime("%Y-%m-%d"),  # 주문일자
-                order.get("주문자_고객명", ""),
-                "",  # 회원번호
-                order.get("주문자_휴대폰번호", ""),
-                order.get("제품명", ""),
-                order.get("제품가격", 0),
-                order.get("PV", 0),
-                "",  # 결재방법
-                order.get("주문자_고객명", ""),
-                order.get("주문자_휴대폰번호", ""),
-                order.get("배송처", ""),
-                "",  # 수령확인
-                image_url
+                datetime.now().strftime("%Y-%m-%d"),             # 주문일자
+                order.get("주문자_고객명", ""),                   # 회원명
+                "",                                              # 회원번호
+                order.get("주문자_휴대폰번호", ""),               # 휴대폰번호
+                order.get("제품명", ""),                          # 제품명
+                order.get("제품가격", 0),                         # 제품가격
+                order.get("PV", 0),                              # PV
+                "",                                              # 결재방법
+                order.get("주문자_고객명", ""),                   # 주문자_고객명
+                order.get("주문자_휴대폰번호", ""),               # 주문자_휴대폰번호
+                order.get("배송처", ""),                          # 배송처
+                "",                                              # 수령확인
+                image_url                                        # 이미지 URL
             ]
-            print(f"[DEBUG] 저장 행 데이터: {row}")
-            # ws.append_row(row, value_input_option="USER_ENTERED")
+            ws.append_row(row, value_input_option="USER_ENTERED")
             saved.append(order)
 
         print(f"✅ {len(saved)}건 시트 저장 완료")
@@ -1391,6 +1369,8 @@ def post_order():
         print("❌ 오류 발생:", e)
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
 
 
 # -------------------------------------------------
