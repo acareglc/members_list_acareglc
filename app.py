@@ -1285,6 +1285,10 @@ def serve_uploaded_image(filename):
 # ==========================================
 # 🧾 제품 주문 저장 (iPad + 이미지)
 # ==========================================
+
+UPLOAD_FOLDER = os.path.join(os.getcwd(), "static")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 @app.route("/order", methods=["POST"])
 def post_order():
     """
@@ -1295,6 +1299,9 @@ def post_order():
     try:
         print("\n" + "=" * 80)
         print("🟢 [STEP 1] /order 요청 수신")
+        print(f"[DEBUG] Content-Type: {request.content_type}")
+        print(f"[DEBUG] request.form.keys(): {list(request.form.keys())}")
+        print(f"[DEBUG] request.files.keys(): {list(request.files.keys())}")
 
         # -------------------------------------------------
         # 1️⃣ 요청 데이터 파싱
@@ -1304,6 +1311,7 @@ def post_order():
         file = request.files.get("image")
 
         if not text:
+            print("⚠️ text 값이 비어 있음")
             return jsonify({"status": "error", "message": "❌ text 값이 없습니다."}), 400
 
         print(f"📋 텍스트 명령: {text}")
@@ -1326,11 +1334,12 @@ def post_order():
         # -------------------------------------------------
         try:
             orders = json.loads(orders_raw) if orders_raw else []
+            print(f"[DEBUG] orders_raw 파싱 완료: {len(orders)}건")
         except Exception as e:
             print("⚠️ orders JSON 파싱 실패:", e)
             orders = []
 
-        # 이미지가 있으나 orders 없을 경우, text만으로라도 1행 기록
+        # 이미지만 있고 orders 없을 경우 → text 기반 기본값 생성
         if not orders:
             orders = [{
                 "주문자_고객명": "이태수" if "이태수" in text else "",
@@ -1340,30 +1349,33 @@ def post_order():
                 "주문자_휴대폰번호": "",
                 "배송처": ""
             }]
+            print("[DEBUG] 기본 order 1건 생성")
 
         # -------------------------------------------------
         # 4️⃣ Google Sheets 저장
         # -------------------------------------------------
-        ws = sheet.worksheet("제품주문")
+        print(f"🧾 시트 저장 준비 중... (총 {len(orders)}건)")
+        # ws = sheet.worksheet("제품주문")  # 실제 운영 시 주석 해제
         saved = []
 
         for order in orders:
             row = [
-                datetime.now().strftime("%Y-%m-%d"),             # 주문일자
-                order.get("주문자_고객명", ""),                   # 회원명
-                "",                                              # 회원번호
-                order.get("주문자_휴대폰번호", ""),               # 휴대폰번호
-                order.get("제품명", ""),                          # 제품명
-                order.get("제품가격", 0),                         # 제품가격
-                order.get("PV", 0),                              # PV
-                "",                                              # 결재방법
-                order.get("주문자_고객명", ""),                   # 주문자_고객명
-                order.get("주문자_휴대폰번호", ""),               # 주문자_휴대폰번호
-                order.get("배송처", ""),                          # 배송처
-                "",                                              # 수령확인
-                image_url                                        # 📸 이미지 URL
+                datetime.now().strftime("%Y-%m-%d"),  # 주문일자
+                order.get("주문자_고객명", ""),
+                "",  # 회원번호
+                order.get("주문자_휴대폰번호", ""),
+                order.get("제품명", ""),
+                order.get("제품가격", 0),
+                order.get("PV", 0),
+                "",  # 결재방법
+                order.get("주문자_고객명", ""),
+                order.get("주문자_휴대폰번호", ""),
+                order.get("배송처", ""),
+                "",  # 수령확인
+                image_url
             ]
-            ws.append_row(row, value_input_option="USER_ENTERED")
+            print(f"[DEBUG] 저장 행 데이터: {row}")
+            # ws.append_row(row, value_input_option="USER_ENTERED")
             saved.append(order)
 
         print(f"✅ {len(saved)}건 시트 저장 완료")
@@ -1381,12 +1393,9 @@ def post_order():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-
-
-
-
-
-
+# -------------------------------------------------
+# Plugin manifest & OpenAPI schema
+# -------------------------------------------------
 @app.route("/.well-known/ai-plugin.json")
 def serve_plugin_manifest():
     return send_from_directory(".", "ai-plugin.json", mimetype="application/json")
@@ -1394,6 +1403,7 @@ def serve_plugin_manifest():
 @app.route("/openapi.json")
 def serve_openapi_schema():
     return send_from_directory(".", "openapi.json", mimetype="application/json")
+
 
 
 
