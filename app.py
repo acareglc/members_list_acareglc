@@ -1029,8 +1029,17 @@ def memo_route():
 
         # ✅ 자연어 입력 간주 조건 → post_intent() 우회
         if "query" in data and isinstance(data["query"], str) and not intent:
+            query_text = data["query"]
+            # ❌ 회원수정 관련 문장은 post_intent로 넘기지 않음
+            if any(keyword in query_text for keyword in ["회원수정", "주소 변경", "전화번호 수정", "번호 수정"]):
+                return jsonify({
+                    "status": "error",
+                    "message": "회원수정 관련 요청은 /member 라우트에서 처리해야 합니다.",
+                    "http_status": 400
+                }), 400
+
+            # ✅ 나머지 자연어 입력만 post_intent()로 우회
             return post_intent()
-        
 
 
 

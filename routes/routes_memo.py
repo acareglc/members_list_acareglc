@@ -333,20 +333,22 @@ def search_memo_core(sheet_name, keywords, member_name=None,
             except Exception:
                 pass
 
-        content_lower = content.lower()
+        # ✅ 검색 대상: 회원명 + 내용 둘 다 포함
+        search_target = f"{member.lower()} {content.lower()}"
 
         # ✅ 정확한 문장 일치 우선 검사
-        if full_phrase and full_phrase not in content_lower:
+        if full_phrase and full_phrase not in search_target:
             continue
 
         # ✅ 키워드 검사 (AND/OR)
         if keywords:
             if and_mode:
-                if not all(kw in content_lower for kw in keywords):
+                if not all(kw in search_target for kw in keywords):
                     continue
             else:
-                if not any(kw in content_lower for kw in keywords):
+                if not any(kw in search_target for kw in keywords):
                     continue
+
 
         results.append({
             "날짜": date_str,
