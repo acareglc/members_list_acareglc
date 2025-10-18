@@ -972,7 +972,18 @@ def memo_route():
 
         # ✅ 자연어 입력 간주 조건 → post_intent() 우회
         if "query" in data and isinstance(data["query"], str) and not intent:
+            query_text = data["query"]
+            # ❌ 회원수정 관련 문장은 post_intent로 넘기지 않음
+            if any(keyword in query_text for keyword in ["회원수정", "주소 변경", "전화번호 수정", "번호 수정"]):
+                return jsonify({
+                    "status": "error",
+                    "message": "회원수정 관련 요청은 /member 라우트에서 처리해야 합니다.",
+                    "http_status": 400
+                }), 400
+
+            # ✅ 나머지 자연어 입력만 post_intent()로 우회
             return post_intent()
+
         
 
 
@@ -1060,76 +1071,125 @@ def memo_route():
 @app.route("/order", methods=["POST"])
 def order_route():
     """
-    주문 관련 API (intent 기반 단일 엔드포인트)
-    - before_request 에서 g.query["intent"] 세팅됨
-    - 자연어 입력이면 postIntent로 우회
-    - 파일 업로드면 order_upload 바로 처리
+    제품 주문 처리 API (자연어 + OCR JSON 통합 지원)
+    -------------------------------------------------
+    ① 자연어 명령 ("이태수 제품주문 저장 징코앤낫토 2개 카드결제")
+    ② Vision OCR JSON ({ "orders": [...] })
+    ③ multipart/form-data (iPad, 이미지 업로드 포함)
+    모두 지원하는 단일 엔드포인트.
+    -------------------------------------------------
     """
     try:
-        # 0) 파일 업로드 우선 처리 (multipart/form-data)
-        if hasattr(request, "files") and request.files:
-            if not hasattr(g, "query") or not isinstance(g.query, dict):
-                g.query = {"intent": "order_upload_pc", "query": {}}
-            result = ORDER_INTENTS.get("order_upload_pc", order_upload_pc_func)()
+        print("\n" + "=" * 80)
+        print("🟢 [STEP 1] /order 요청 수신")
 
+        # -------------------------------------------------
+        # 1️⃣ 요청 데이터 파싱
+        # -------------------------------------------------
+        data = request.get_json(silent=True)
+        if not data:
+            # ✅ Vision (multipart/form-data) 요청 처리
+            if request.form:
+                print("📸 multipart/form-data 감지 → 수동 파싱 시도")
 
-            if isinstance(result, dict):
-                return jsonify(result), result.get("http_status", 200)
-            if isinstance(result, list):
-                return jsonify(result), 200
-            return jsonify({"status": "error", "message": "알 수 없는 반환 형식"}), 500
+                text = request.form.get("text") or request.form.get("query") or ""
+                orders_raw = request.form.get("orders") or request.form.get("payload")
 
-        data = getattr(g, "query", {}) or {}
-        q = data.get("query")
+                try:
+                    orders = json.loads(orders_raw) if orders_raw else []
+                except Exception as e:
+                    print("⚠️ orders JSON 파싱 실패:", e)
+                    orders = []
 
-        # 1) 자연어 판단
-        if isinstance(q, str):
+                # 이미지 파일
+                file = request.files.get("image")
+                image_url = ""
+                if file:
+                    upload_folder = "./uploaded_images"
+                    os.makedirs(upload_folder, exist_ok=True)
+                    filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+                    save_path = os.path.join(upload_folder, filename)
+                    file.save(save_path)
+                    image_url = f"/static/{filename}"
+
+                data = {
+                    "query": text.strip(),
+                    "orders": orders,
+                    "image_url": image_url,
+                }
+            else:
+                return jsonify({
+                    "status": "error",
+                    "message": "❌ JSON 또는 form-data 형식이 아닙니다.",
+                    "http_status": 400
+                }), 400
+
+        # -------------------------------------------------
+        # 2️⃣ query / orders 필드 확인
+        # -------------------------------------------------
+        query_text = data.get("query", "").strip()
+        orders = data.get("orders", [])
+
+        print(f"📋 명령문: {query_text}")
+        print(f"📦 OCR 추출된 주문 수: {len(orders)}")
+
+        # -------------------------------------------------
+        # 3️⃣ 자연어 문장인 경우 → post_intent()로 분기
+        # -------------------------------------------------
+        if query_text and not orders:
+            # 자연어 명령 ("이태수 제품주문 저장") 형태는 post_intent()로 위임
+            print("🧠 자연어 입력 감지 → post_intent() 위임")
             return post_intent()
-        if isinstance(q, dict):
-            structured_keys = {"items", "상품", "order", "주문", "주문회원", "member", "수량", "결제", "date"}
-            text_like_keys = {"text", "요청문", "주문문", "내용"}
-            if any(k in q for k in text_like_keys) and not any(k in q for k in structured_keys):
-                return post_intent()
 
-        # 2) intent 기반 실행
-        intent = data.get("intent")
-        func = ORDER_INTENTS.get(intent)
+        # -------------------------------------------------
+        # 4️⃣ OCR 결과가 존재하는 경우 → 직접 저장
+        # -------------------------------------------------
+        from parser import handle_order_save
 
-        if not func:
-            return jsonify({
-                "status": "error",
-                "message": f"❌ 처리할 수 없는 주문 intent입니다. (intent={intent})",
-            }), 400
-
-        result = func()
-
-        # ✅ 결과 처리
-        if isinstance(result, dict):
-            http_status = result.get("http_status", 200)
-            response = {
-                "http_status": http_status,
-                "intent": intent,
-                "status": result.get("status", "ok"),
+        saved_results = []
+        for o in orders:
+            order_data = {
+                "주문일자": datetime.now().strftime("%Y-%m-%d"),
+                "회원명": o.get("주문자_고객명", ""),
+                "제품명": o.get("제품명", ""),
+                "제품가격": o.get("제품가격", 0),
+                "PV": o.get("PV", 0),
+                "주문자_고객명": o.get("주문자_고객명", ""),
+                "주문자_휴대폰번호": o.get("주문자_휴대폰번호", ""),
+                "배송처": o.get("배송처", ""),
             }
-            if result.get("saved_row"):
-                response["saved_row"] = result["saved_row"]
-            if result.get("message"):
-                response["message"] = result["message"]
-            return jsonify(response), http_status
 
-        elif isinstance(result, list):  # 조회 결과
-            return jsonify(result), 200
+            print(f"🧾 시트 저장 준비: {order_data}")
+            result = handle_order_save(order_data)
+            saved_results.append(result)
 
-        else:
-            return jsonify({"status": "error", "message": "알 수 없는 반환 형식"}), 500
+        # -------------------------------------------------
+        # 5️⃣ 결과 반환
+        # -------------------------------------------------
+        return jsonify({
+            "status": "success",
+            "message": f"✅ {len(saved_results)}건의 주문이 저장되었습니다.",
+            "saved_results": saved_results,
+            "http_status": 200,
+        }), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({
             "status": "error",
-            "message": f"주문 처리 중 오류 발생: {str(e)}"
+            "message": f"주문 처리 중 오류 발생: {str(e)}",
+            "http_status": 500
         }), 500
+
+
+
+
+
+
+
+
+
 
 
 
