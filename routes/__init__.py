@@ -57,6 +57,7 @@ from .routes_order import (
     addOrders,
     handle_product_order,
     parse_and_save_order,
+    get_member_info_by_name,
 )
 
 
@@ -103,6 +104,7 @@ __all__ = [
     "addOrders",
     "handle_product_order",
     "parse_and_save_order",
+    "get_member_info_by_name",
 
     # 후원수당
     "commission_find_auto_func", "find_commission_func", "search_commission_by_nl_func",

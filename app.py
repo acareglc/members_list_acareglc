@@ -118,7 +118,7 @@ from routes import (
     order_auto_func,
     save_order_proxy_func,
     addOrders,
-
+    get_member_info_by_name,
 
     # 후원수당
     commission_find_auto_func,
@@ -1279,6 +1279,9 @@ def serve_uploaded_image(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 
+
+
+ws = sheet.worksheet("제품주문")
 # ==========================================
 # 🧾 제품 주문 저장 (JSON + multipart 통합)
 # ==========================================
@@ -1302,11 +1305,11 @@ def post_order():
         image_url = ""
         orders = []
 
-        if data:  # JSON 요청 (ChatGPT 플러그인)
+        if data:
             print("📦 JSON 기반 요청 감지")
             text = data.get("query", "") or data.get("text", "")
             orders = data.get("orders", [])
-        else:  # multipart/form-data 요청 (iPad 등)
+        else:
             print("📸 multipart/form-data 요청 감지")
             text = request.form.get("text", "")
             orders_raw = request.form.get("orders", "")
@@ -1320,7 +1323,9 @@ def post_order():
                 filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
                 save_path = os.path.join(UPLOAD_FOLDER, filename)
                 file.save(save_path)
-                image_url = f"https://memberslist.onrender.com/static/{filename}"
+                BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")  # 기본값 지정 가능
+                image_url = f"{BASE_URL}/static/{filename}"
+
                 print(f"📸 이미지 저장 완료: {image_url}")
 
         if not text:
@@ -1333,7 +1338,7 @@ def post_order():
         # -------------------------------------------------
         if not orders:
             orders = [{
-                "주문자_고객명": "이태수" if "이태수" in text else "",
+                "주문자_고객명": "",
                 "제품명": "",
                 "제품가격": "",
                 "PV": "",
@@ -1342,27 +1347,35 @@ def post_order():
             }]
 
         # -------------------------------------------------
-        # 3️⃣ Google Sheets 저장
+        # 3️⃣ 주문별로 handle_order_save() 호출
         # -------------------------------------------------
-        ws = sheet.worksheet("제품주문")
         saved = []
+
         for order in orders:
-            row = [
-                datetime.now().strftime("%Y-%m-%d"),             # 주문일자
-                order.get("주문자_고객명", ""),                   # 회원명
-                "",                                              # 회원번호
-                order.get("주문자_휴대폰번호", ""),               # 휴대폰번호
-                order.get("제품명", ""),                          # 제품명
-                order.get("제품가격", 0),                         # 제품가격
-                order.get("PV", 0),                              # PV
-                "",                                              # 결재방법
-                order.get("주문자_고객명", ""),                   # 주문자_고객명
-                order.get("주문자_휴대폰번호", ""),               # 주문자_휴대폰번호
-                order.get("배송처", ""),                          # 배송처
-                "",                                              # 수령확인
-                image_url                                        # 이미지 URL
-            ]
-            ws.append_row(row, value_input_option="USER_ENTERED")
+            주문자_고객명 = order.get("주문자_고객명", "").strip()
+            member_info = get_member_info_by_name(주문자_고객명) if 주문자_고객명 else {}
+
+            회원명 = member_info.get("회원명", 주문자_고객명)
+            회원번호 = member_info.get("회원번호", "")
+            휴대폰번호 = member_info.get("휴대폰번호", order.get("주문자_휴대폰번호", ""))
+
+            order_data = {
+                "주문일자": datetime.now().strftime("%Y-%m-%d"),
+                "회원명": 회원명,
+                "회원번호": 회원번호,
+                "휴대폰번호": 휴대폰번호,
+                "제품명": order.get("제품명", ""),
+                "제품가격": order.get("제품가격", 0),
+                "PV": order.get("PV", 0),
+                "결재방법": "",
+                "주문자_고객명": 주문자_고객명,
+                "주문자_휴대폰번호": 휴대폰번호,
+                "배송처": order.get("배송처", ""),
+                "수령확인": "",
+            }
+
+            result = handle_order_save(order_data)
+            print(result.get("latest_order"))
             saved.append(order)
 
         print(f"✅ {len(saved)}건 시트 저장 완료")
@@ -1378,6 +1391,11 @@ def post_order():
         print("❌ 오류 발생:", e)
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+
+
 
 
 
