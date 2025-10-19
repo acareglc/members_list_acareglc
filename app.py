@@ -1349,15 +1349,23 @@ def post_order():
         # -------------------------------------------------
         # 3️⃣ 주문별로 handle_order_save() 호출
         # -------------------------------------------------
+        # 🆕 STEP: 요청문에서 회원명 추출
+        def extract_member_name_from_text(text):
+            match = re.match(r"(\S+)\s+제품주문\s+저장", text)
+            return match.group(1) if match else ""
+
+        요청문_회원명 = extract_member_name_from_text(text)
+        member_info = get_member_info_by_name(요청문_회원명) if 요청문_회원명 else {}
+
+        회원명 = member_info.get("회원명", 요청문_회원명)
+        회원번호 = member_info.get("회원번호", "")
+        기본_휴대폰번호 = member_info.get("휴대폰번호", "")
+
         saved = []
 
         for order in orders:
             주문자_고객명 = order.get("주문자_고객명", "").strip()
-            member_info = get_member_info_by_name(주문자_고객명) if 주문자_고객명 else {}
-
-            회원명 = member_info.get("회원명", 주문자_고객명)
-            회원번호 = member_info.get("회원번호", "")
-            휴대폰번호 = member_info.get("휴대폰번호", order.get("주문자_휴대폰번호", ""))
+            휴대폰번호 = order.get("주문자_휴대폰번호", "") or 기본_휴대폰번호
 
             order_data = {
                 "주문일자": datetime.now().strftime("%Y-%m-%d"),
@@ -1391,10 +1399,6 @@ def post_order():
         print("❌ 오류 발생:", e)
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
-
-
-
-
 
 
 
