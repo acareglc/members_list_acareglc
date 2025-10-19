@@ -779,6 +779,25 @@ def nlu_to_pc_input(text: str) -> dict:
         keyword = m.group(3)
         return {"intent": "memo_search", "query": {"회원명": "전체", "일지종류": "전체", "검색어": keyword}}
 
+
+    # 메모 검색 (회원명 없이 일지종류만 있는 경우)
+    m = re.match(r"(개인일지|상담일지|활동일지|개인 일지|상담 일지|활동 일지)\s+(검색|조회)\s+(.+)", text)
+    if m:
+        diary_type, _, keyword = m.groups()
+        return {
+            "intent": "memo_search",
+            "query": {
+                "회원명": None,
+                "일지종류": diary_type,
+                "검색어": keyword
+            }
+        }
+
+
+
+
+
+
     # -------------------------------
     # 주문 관련
     # -------------------------------

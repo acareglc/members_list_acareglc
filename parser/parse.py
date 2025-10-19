@@ -9,6 +9,11 @@ import unicodedata
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+
+
+
+
+
 # =================================================
 # 외부 라이브러리
 # =================================================
@@ -1179,17 +1184,119 @@ def parse_request_line(text: str) -> Tuple[Optional[str], Optional[str], Optiona
     return member, sheet, action, content
 
 
+
+
+
+
+
+
+
+
+
 # ======================================================================================
 # ✅ 메모 파서 + 저장
 # ======================================================================================
 def parse_memo(text: str) -> dict:
-    text = (text or "").strip()
+    text = (text or '').strip()
     diary_types = ["상담일지", "개인일지", "활동일지"]
-    result = {"회원명": None, "일지종류": None, "내용": None, "keywords": []}
+    result = {
+        "회원명": None,
+        "일지종류": None,
+        "내용": None,
+        "keywords": [],
+        "start_date": None,
+        "end_date": None,
+    }
 
     normalized = text.replace(" ", "")
 
-    # ✅ 전체메모 검색
+    def extract_date_filters(text):
+        date_filter = {}
+
+        # 오늘 날짜 기준 변수
+        now = datetime.now()
+        current_year = now.year
+        current_month = now.month
+        last_year = current_year - 1
+
+        # YYYY년 이후
+        m = re.search(r"(\d{4})년\s*이후", text)
+        if m:
+            date_filter["start_date"] = f"{m.group(1)}-01-01"
+
+        # YYYY년 이전
+        m = re.search(r"(\d{4})년\s*이전", text)
+        if m:
+            date_filter["end_date"] = f"{m.group(1)}-12-31"
+
+        # YYYY년 MM월 이후
+        m = re.search(r"(\d{4})년\s*(\d{1,2})월\s*이후", text)
+        if m:
+            y, mth = int(m.group(1)), int(m.group(2))
+            date_filter["start_date"] = f"{y}-{mth:02d}-01"
+
+        # YYYY년 MM월 이전
+        m = re.search(r"(\d{4})년\s*(\d{1,2})월\s*이전", text)
+        if m:
+            y, mth = int(m.group(1)), int(m.group(2))
+            date_filter["end_date"] = f"{y}-{mth:02d}-30"
+
+        # MM월 이후
+        m = re.search(r"(\d{1,2})월\s*이후", text)
+        if m:
+            mth = int(m.group(1))
+            date_filter["start_date"] = f"{current_year}-{mth:02d}-01"
+
+        # MM월 이전
+        m = re.search(r"(\d{1,2})월\s*이전", text)
+        if m:
+            mth = int(m.group(1))
+            date_filter["end_date"] = f"{current_year}-{mth:02d}-30"
+
+        # 작년 이후
+        if "작년 이후" in text:
+            date_filter["start_date"] = f"{last_year}-01-01"
+
+        # 작년
+        elif "작년" in text and "작년 이후" not in text:
+            date_filter["start_date"] = f"{last_year}-01-01"
+            date_filter["end_date"] = f"{last_year}-12-31"
+
+        # 올해 이전
+        if "올해 이전" in text:
+            date_filter["end_date"] = f"{current_year}-01-01"
+
+        # 올해
+        elif "올해" in text and "올해 이전" not in text:
+            date_filter["start_date"] = f"{current_year}-01-01"
+            date_filter["end_date"] = f"{current_year}-12-31"
+
+        # 지난달
+        if "지난달" in text:
+            if current_month == 1:
+                year = current_year - 1
+                month = 12
+            else:
+                year = current_year
+                month = current_month - 1
+            date_filter["start_date"] = f"{year}-{month:02d}-01"
+            date_filter["end_date"] = f"{year}-{month:02d}-30"
+
+        # 이번달
+        if "이번달" in text:
+            date_filter["start_date"] = f"{current_year}-{current_month:02d}-01"
+            date_filter["end_date"] = f"{current_year}-{current_month:02d}-31"
+
+        # 최근 일주일
+        if "최근 일주일" in text or "최근 1주일" in text:
+            end_date = now
+            start_date = end_date - timedelta(days=7)
+            date_filter["start_date"] = start_date.strftime("%Y-%m-%d")
+            date_filter["end_date"] = end_date.strftime("%Y-%m-%d")
+
+        return date_filter
+
+    # 전체메모 검색
     if normalized.startswith("전체메모") and "검색" in text:
         keyword = text.split("검색", 1)[1].strip()
         result.update({
@@ -1197,9 +1304,10 @@ def parse_memo(text: str) -> dict:
             "일지종류": "전체",
             "keywords": keyword.split() if keyword else []
         })
+        result.update(extract_date_filters(text))
         return result
 
-    # ✅ 일반 저장/검색
+    # 일반 저장/검색
     for dt in diary_types:
         if dt in text:
             before, after = text.split(dt, 1)
@@ -1208,16 +1316,19 @@ def parse_memo(text: str) -> dict:
 
             if "저장" in after:
                 result["회원명"] = member if member else None
-                result["내용"] = after.strip()  # '저장' 포함됨
+                result["내용"] = after.strip()
 
             elif "검색" in after:
                 keyword = after.replace("검색", "").strip()
                 result["회원명"] = member if member else None
                 result["keywords"] = keyword.split() if keyword else []
 
+            result.update(extract_date_filters(text))
             return result
 
     return result
+
+
 
 
 

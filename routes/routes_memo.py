@@ -6,6 +6,8 @@ from utils import handle_search_memo
 from utils.sheets import get_worksheet
 from datetime import datetime
 
+sheet_name, keywords, member_name = None, [], None
+start_date, end_date = None, None  # ✅ 추가
 
 
 
@@ -183,6 +185,11 @@ def search_memo_func():
         else:
             # ✅ g.query가 문자열인 경우 (자연어 직접 입력)
             parsed = parse_memo(q) if q else {}
+            start_date = parsed.get("start_date")
+            end_date = parsed.get("end_date")
+
+
+
             print("[DEBUG] parse_memo output:", parsed)
 
             sheet_name = parsed.get("일지종류", "").strip()
@@ -277,6 +284,11 @@ def search_memo_func():
             "message": str(e),
             "http_status": 500
         }
+
+
+
+
+
 
 
 
