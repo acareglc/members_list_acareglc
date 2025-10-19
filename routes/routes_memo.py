@@ -192,8 +192,11 @@ def search_memo_func():
 
             print("[DEBUG] parse_memo output:", parsed)
 
-            sheet_name = parsed.get("일지종류", "").strip()
-            member_name = parsed.get("회원명", "").strip()
+            sheet_name = (parsed.get("일지종류") or "").strip()
+            member_name = (parsed.get("회원명") or "").strip()
+
+
+           
 
             if "keywords" in parsed:
                 keywords = parsed["keywords"]
@@ -249,10 +252,6 @@ def search_memo_func():
                     and_mode=and_mode
                 )
             }
-
-
-
-
 
 
         # ----------------------------
