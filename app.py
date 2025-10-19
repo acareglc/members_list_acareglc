@@ -1337,11 +1337,14 @@ def post_order():
                     orders = json.loads(orders_raw)
                 except Exception as e:
                     print("⚠️ orders JSON 파싱 실패:", e)
+
+            # ✅ 이미지 저장        
             file = request.files.get("image")
             if file:
                 filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
                 save_path = os.path.join(UPLOAD_FOLDER, filename)
                 file.save(save_path)
+
                 BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")  # 기본값 지정 가능
                 image_url = f"{BASE_URL}/static/{filename}"
 
@@ -1351,6 +1354,9 @@ def post_order():
             return jsonify({"status": "error", "message": "❌ text/query 값이 없습니다."}), 400
 
         print(f"🧾 요청 텍스트: {text}")
+
+
+
 
 
         # -------------------------------------------------
@@ -1369,10 +1375,13 @@ def post_order():
 
         print(f"👤 회원명: {회원명}, 회원번호: {회원번호}, 기본휴대폰: {회원_휴대폰번호}")
 
+
+
         # -------------------------------------------------
-        # 3️⃣ 주문 정보(OCR 결과) 분리 저장
+        # 3️⃣ OCR 결과(주문자/소비자 기준) 확인
         # -------------------------------------------------
         if not orders:
+            print("⚠️ OCR 결과 없음 → 빈 주문 데이터 생성")
             orders = [{
                 "제품명": "",
                 "제품가격": "",
@@ -1383,9 +1392,8 @@ def post_order():
             }]
 
         saved = []
-        
         for order in orders:
-            # ✅ OCR 데이터 (주문자/소비자 기준)
+            # ✅ OCR 데이터 (소비자 기준)
             주문자_고객명 = order.get("주문자_고객명", "").strip()
             주문자_휴대폰번호 = order.get("주문자_휴대폰번호", "").strip()
             배송처 = order.get("배송처", "").strip()
@@ -1398,9 +1406,9 @@ def post_order():
                 "휴대폰번호": 회원_휴대폰번호,
 
                 # 🔹 주문자 기준 (소비자)
-                "주문자_고객명": 주문자_고객명,
-                "주문자_휴대폰번호": 주문자_휴대폰번호,
-                "배송처": 배송처,
+                "주문자_고객명": 주문자_고객명 or "",
+                "주문자_휴대폰번호": 주문자_휴대폰번호 or "",
+                "배송처": 배송처 or "",
 
                 # 🔹 주문 상세
                 "제품명": order.get("제품명", ""),
@@ -1411,13 +1419,16 @@ def post_order():
                 "주문일자": datetime.now().strftime("%Y-%m-%d"),
             }
 
-            # ✅ 실제 저장 함수 호출
+            # ✅ 시트 저장
             result = handle_order_save(order_data)
             print(f"🧾 저장된 주문 데이터: {result.get('latest_order')}")
             saved.append(order_data)
 
         print(f"✅ {len(saved)}건 시트 저장 완료")
 
+        # -------------------------------------------------
+        # 4️⃣ 결과 반환
+        # -------------------------------------------------
         return jsonify({
             "status": "success",
             "message": f"{len(saved)}건 저장 완료",
@@ -1429,6 +1440,11 @@ def post_order():
         print("❌ 오류 발생:", e)
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+    
+
+
+
+
 
 
 
