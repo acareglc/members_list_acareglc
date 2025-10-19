@@ -1185,46 +1185,40 @@ def parse_request_line(text: str) -> Tuple[Optional[str], Optional[str], Optiona
 def parse_memo(text: str) -> dict:
     text = (text or "").strip()
     diary_types = ["상담일지", "개인일지", "활동일지"]
-
     result = {"회원명": None, "일지종류": None, "내용": None, "keywords": []}
 
-    # ✅ 전체메모 검색 (띄어쓰기 허용)
     normalized = text.replace(" ", "")
 
+    # ✅ 전체메모 검색
     if normalized.startswith("전체메모") and "검색" in text:
         keyword = text.split("검색", 1)[1].strip()
         result.update({
-            "회원명": "전체",  
+            "회원명": "전체",
             "일지종류": "전체",
-            # 🔽 기존: "홍길동 제품" → ["홍길동 제품"]
-            # "홍길동 제품" → ["홍길동", "제품"] 로 분리되도록 수정
             "keywords": keyword.split() if keyword else []
         })
         return result
-
-    
-
 
     # ✅ 일반 저장/검색
     for dt in diary_types:
         if dt in text:
             before, after = text.split(dt, 1)
-            result["회원명"] = before.strip()
+            member = before.strip()
             result["일지종류"] = dt
 
-
             if "저장" in after:
-                result["내용"] = after.strip()   # ✅ '저장' 토큰 제거하지 않음
-         
+                result["회원명"] = member if member else None
+                result["내용"] = after.strip()  # '저장' 포함됨
+
             elif "검색" in after:
                 keyword = after.replace("검색", "").strip()
+                result["회원명"] = member if member else None
                 result["keywords"] = keyword.split() if keyword else []
-
-
 
             return result
 
     return result
+
 
 
 
