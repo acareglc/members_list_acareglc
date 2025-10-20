@@ -188,8 +188,8 @@ def order_upload_func():
                 "제품가격": o.get("제품가격"),
                 "PV": o.get("PV"),
                 "결재방법": o.get("결재방법", "카드"),
-                "주문자_고객명": o.get("주문자_고객명"),
-                "주문자_휴대폰번호": o.get("주문자_휴대폰번호"),
+                "소비자_고객명": o.get("소비자_고객명"),
+                "소비자_휴대폰번호": o.get("소비자_휴대폰번호"),
                 "배송처": o.get("배송처"),
                 "수령확인": o.get("수령확인", "N"),
             })
@@ -309,8 +309,8 @@ if __name__ == "__main__":
     제품가격: 239000
     PV: 120000
     결재방법: 카드
-    주문자_고객명: 김성옥
-    주문자_휴대폰번호: 010-3925-8255
+    소비자_고객명: 김성옥
+    소비자_휴대폰번호: 010-3925-8255
     배송처: 대구 북구 산격2동 1659번지, 동아베스트 3층
     수령확인: N
     '''
@@ -515,8 +515,8 @@ def order_upload_pc_func():
             o.setdefault("주문일자", process_order_date(""))
             o.setdefault("결재방법", "")
             o.setdefault("수령확인", "N")
-            o.setdefault("주문자_고객명", "")
-            o.setdefault("주문자_휴대폰번호", "")
+            o.setdefault("소비자_고객명", "")
+            o.setdefault("소비자_휴대폰번호", "")
             o.setdefault("배송처", "")
 
             fixed_orders.append(o)
@@ -673,8 +673,8 @@ def parse_and_save_order(data: dict):
             "제품가격": 0,
             "PV": 0,
             "결재방법": "카드",
-            "주문자_고객명": member_name,
-            "주문자_휴대폰번호": "",
+            "소비자_고객명": member_name,
+            "소비자_휴대폰번호": "",
             "배송처": "",
             "수령확인": "",
         }
@@ -724,8 +724,8 @@ def handle_order_save(data: dict):
         float(data.get("제품가격", 0)), 
         float(data.get("PV", 0)),
         data.get("결재방법", ""), 
-        data.get("주문자_고객명", ""), 
-        data.get("주문자_휴대폰번호", ""),
+        data.get("소비자_고객명", ""), 
+        data.get("소비자_휴대폰번호", ""),
         data.get("배송처", ""), 
         data.get("수령확인", "")
     ]
@@ -739,7 +739,7 @@ def handle_order_save(data: dict):
         headers = [
             "주문일자", "회원명", "회원번호", "휴대폰번호",
             "제품명", "제품가격", "PV", "결재방법",
-            "주문자_고객명", "주문자_휴대폰번호", "배송처", "수령확인"
+            "소비자_고객명", "소비자_휴대폰번호", "배송처", "수령확인"
         ]
         sheet.append_row(headers)
         values = [headers]

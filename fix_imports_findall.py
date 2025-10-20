@@ -5,7 +5,7 @@ import re
 
 # 정확히 교체할 대상 (import 구문 전체 문자열 기준)
 
-OLD = r"비밀번호"
+OLD = r"소비자_휴대폰번호"
 
 
 # NEW = r"query_multi"

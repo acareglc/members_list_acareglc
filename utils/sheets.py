@@ -287,7 +287,7 @@ def _ensure_orders_list(data: Any) -> List[Dict[str, Any]]:
 def openai_vision_extract_orders(image_bytes: io.BytesIO) -> List[Dict[str, Any]]:
     """
     이미지 → 주문 JSON 추출 (OpenAI Vision 모델)
-    반환: [{'제품명':..., '제품가격':..., 'PV':..., '주문자_고객명':..., '주문자_휴대폰번호':..., '배송처':..., '결재방법': '', '수령확인': ''}, ...]
+    반환: [{'제품명':..., '제품가격':..., 'PV':..., '소비자_고객명':..., '소비자_휴대폰번호':..., '배송처':..., '결재방법': '', '수령확인': ''}, ...]
     """
     if not OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY 미설정")
@@ -302,7 +302,7 @@ def openai_vision_extract_orders(image_bytes: io.BytesIO) -> List[Dict[str, Any]
         "질문하지 말고 추출된 orders 전체를 그대로 저장할 준비를 하세요. "
         "(이름, 휴대폰번호, 주소)는 소비자 정보임. "
         "회원명, 결재방법, 수령확인, 주문일자 무시. "
-        "필드: 제품명, 제품가격, PV, 주문자_고객명, 주문자_휴대폰번호, 배송처"
+        "필드: 제품명, 제품가격, PV, 소비자_고객명, 소비자_휴대폰번호, 배송처"
     )
 
     headers = {

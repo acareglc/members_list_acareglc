@@ -117,8 +117,8 @@
                         "제품명": { "type": "string", "example": "애터미 징코앤낫토 (60정, 2개월분)" },
                         "제품가격": { "type": "number", "example": 25800 },
                         "PV": { "type": "number", "example": 9500 },
-                        "주문자_고객명": { "type": "string", "example": "이태수" },
-                        "주문자_휴대폰번호": { "type": "string", "example": "010-2759-9001" },
+                        "소비자_고객명": { "type": "string", "example": "이태수" },
+                        "소비자_휴대폰번호": { "type": "string", "example": "010-2759-9001" },
                         "배송처": { "type": "string", "example": "[41518] 대구 북구 산격2동 1659번지" }
                       }
                     }
