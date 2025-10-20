@@ -1,5 +1,3 @@
-.env
-__pycache__/
 *.pyc
 # 민감 정보 제외
 *.json
@@ -19,4 +17,50 @@ path/to/broken-folder/*
 *\354*
 
 ssh_config
+
+
+
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Environments
+.env
+.env.*
+venv*/
+.venv*/
+
+# Logs
+*.log
+logs/
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Auth / Credentials
+*.json
+*.key
+*.pem
+*.pkl
+token_*.pkl
+*.bak
+
+# Uploads / Generated
+uploaded_images/
+uploads/
+
+*_test.py
+*.ps1
+0*.py
+
 
