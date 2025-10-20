@@ -1401,9 +1401,15 @@ def post_order():
         saved = []
         for order in orders:
             # ✅ OCR 데이터 (소비자 기준)
-            주문자_고객명 = order.get("주문자_고객명", "").strip()
-            주문자_휴대폰번호 = order.get("주문자_휴대폰번호", "").strip()
-            배송처 = order.get("배송처", "").strip()
+            # ⚠️ OCR 결과가 비어 있어도 절대 회원명으로 대체하지 않음
+            주문자_고객명 = (order.get("주문자_고객명") or "").strip()
+            주문자_휴대폰번호 = (order.get("주문자_휴대폰번호") or "").strip()
+            배송처 = (order.get("배송처") or "").strip()
+
+            # ✅ 강제 초기화 (회원명 절대 덮어쓰지 않게)
+            if not 주문자_고객명:
+                주문자_고객명 = ""   # OCR 결과가 없으면 공백 유지
+
 
             # ✅ 주문서 데이터 구성
             order_data = {
@@ -1448,6 +1454,7 @@ def post_order():
         print("❌ 오류 발생:", e)
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+    
     
 
 
