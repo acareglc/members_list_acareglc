@@ -1318,19 +1318,19 @@ def post_order():
 # - 이미지(배송지) → 주문자 정보(수취인 기준, 고객명/번호/주소)
 # - 저장 시: 회원명 ≠ 주문자_고객명 일 수 있음 (정상)
 
-
     try:
         print("\n" + "=" * 80)
         print("🟢 [STEP 1] /order 요청 수신")
 
-        # -------------------------------------------------
-        # 1️⃣ JSON or multipart 자동 감지
-        # -------------------------------------------------
         data = request.get_json(silent=True)
         text = ""
         image_url = ""
         orders = []
 
+
+        # -------------------------------------------------
+        # 1️⃣ JSON or multipart 자동 감지
+        # -------------------------------------------------
         if data:
             print("📦 JSON 기반 요청 감지")
             text = data.get("query", "") or data.get("text", "")
@@ -1338,12 +1338,6 @@ def post_order():
         else:
             print("📸 multipart/form-data 요청 감지")
             text = request.form.get("text", "")
-            orders_raw = request.form.get("orders", "")
-            if orders_raw:
-                try:
-                    orders = json.loads(orders_raw)
-                except Exception as e:
-                    print("⚠️ orders JSON 파싱 실패:", e)
 
             # ✅ 이미지 저장        
             file = request.files.get("image")
@@ -1352,10 +1346,24 @@ def post_order():
                 save_path = os.path.join(UPLOAD_FOLDER, filename)
                 file.save(save_path)
 
-                BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")  # 기본값 지정 가능
+                BASE_URL = os.getenv("BASE_URL", "http://localhost:5000")
                 image_url = f"{BASE_URL}/static/{filename}"
 
                 print(f"📸 이미지 저장 완료: {image_url}")
+
+                # ✅ OCR 분석으로 주문자 정보 추출
+                orders = ocr_extract_orders_from_image(save_path)
+                print(f"🧾 OCR 기반 주문자 정보 추출 완료: {orders}")
+            else:
+                print("⚠️ 이미지 누락 → OCR 불가")
+                orders = [{
+                    "제품명": "",
+                    "제품가격": "",
+                    "PV": "",
+                    "주문자_고객명": "",
+                    "주문자_휴대폰번호": "",
+                    "배송처": ""
+                }]
 
         if not text:
             return jsonify({"status": "error", "message": "❌ text/query 값이 없습니다."}), 400
@@ -1383,21 +1391,9 @@ def post_order():
         print(f"👤 회원명: {회원명}, 회원번호: {회원번호}, 기본휴대폰: {회원_휴대폰번호}")
 
 
-
         # -------------------------------------------------
-        # 3️⃣ OCR 결과(주문자/소비자 기준) 확인
+        # 3️⃣ 주문 정보 저장
         # -------------------------------------------------
-        if not orders:
-            print("⚠️ OCR 결과 없음 → 빈 주문 데이터 생성")
-            orders = [{
-                "제품명": "",
-                "제품가격": "",
-                "PV": "",
-                "주문자_고객명": "",
-                "주문자_휴대폰번호": "",
-                "배송처": ""
-            }]
-
         saved = []
         for order in orders:
             # ✅ OCR 데이터 (소비자 기준)
@@ -1457,6 +1453,16 @@ def post_order():
     
     
 
+def ocr_extract_orders_from_image(image_path):
+    # 실제 OCR 로직 대체 예시
+    return [{
+        "제품명": "",
+        "제품가격": 0,
+        "PV": 0,
+        "주문자_고객명": "이태수",
+        "주문자_휴대폰번호": "010-1234-5678",
+        "배송처": "경상북도 칠곡군 ..."
+    }]
 
 
 
