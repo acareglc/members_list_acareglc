@@ -9,11 +9,10 @@
   },
   "api": {
     "type": "openapi",
-    "url": "https://memberslist.onrender.com/openapi.json"
+    "url": "https://members-list-acareglc.onrender.com/openapi.json"
   },
-  "logo_url": "https://memberslist.onrender.com/static/logo.png",
-  "contact_email": "support@memberslist.com",
-  "legal_info_url": "https://memberslist.onrender.com/terms"
+  "logo_url": "https://members-list-acareglc.onrender.com/static/logo.png",
+  "contact_email": "support@members-list-acareglc.com",
+  "legal_info_url": "https://members-list-acareglc.onrender.com/terms"
 }
-
 
