@@ -975,8 +975,18 @@ def member_route():
                 intent = "select_member"
                 g.query["choice"] = "2"
             else:
+
+
                 # 그 외 자연어 → 별도 intent 처리기로 위임
-                return post_intent()
+                response = post_intent()
+                if not response:
+                    return jsonify({
+                        "status": "error",
+                        "message": "❌ post_intent() 함수가 응답을 반환하지 않았습니다.",
+                        "http_status": 500
+                    }), 500
+                return response
+
 
     # ✅ (3) fallback: intent 추론된 상태에서 처리
     func = MEMBER_INTENTS.get(intent)
@@ -1491,7 +1501,6 @@ def serve_openapi_schema():
 
 # 정상
 
-# 완벽동작
 
 
 
